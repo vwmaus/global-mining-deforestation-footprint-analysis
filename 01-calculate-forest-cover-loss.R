@@ -159,7 +159,7 @@ for(tl in sort(unique(global_quarry$tile_id))){
   res_loss <- lapply(select(gee_floss, matches('forest_loss')) |> names(), function(i){
     gee_floss |> 
       select_at(c('id', i)) |> 
-      rename_with(~ c('id', 'forest_loss'), all_of(c('id', i))) 
+      rename_with(~ c('id', 'forest_loss'), all_of(c('id', i))) |>  
       unnest(cols = forest_loss) |> 
       mutate(year = 2000 + as.numeric(stringr::str_extract(forest_loss, pattern = "(?<=\"group\": ).*(?=,)")),
              area = stringr::str_replace(forest_loss, " \\}", "END"),
