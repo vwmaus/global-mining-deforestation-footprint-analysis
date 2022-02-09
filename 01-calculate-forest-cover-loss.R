@@ -98,7 +98,7 @@ distSaveAll = ee$Join$saveAll(matchesKey = 'ecoregion')
 
 # ------------------------------------------------------------------------------
 # define mining and quarry processing tiles
-n_tile_features <- 200
+n_tile_features <- 300
 global_quarry <- st_read(global_quarry_path, quiet = TRUE) |> 
   filter(country != "Antarctica") |> # OSM includes some polygons in Antarctica: Removed 
   mutate(tile_id = rep(1:n(), each = n_tile_features)[1:n()])
@@ -109,11 +109,11 @@ global_quarry <- st_read(global_quarry_path, quiet = TRUE) |>
 gee_dir <- str_c("./data/gee_tiles_forest_loss_", data_version)
 dir.create(gee_dir, showWarnings = FALSE, recursive = TRUE)
 pb <- progress_bar$new(total = length(unique(global_quarry$tile_id)))
-pb <- progress_bar$new(total = 3)
-for(tl in sort(unique(global_quarry$tile_id))[1:3]){
+for(tl in sort(unique(global_quarry$tile_id))){
+  
   pb$tick()
   
-  tile_feat <- filter(global_quarry, tile_id == tl)[1:100,]
+  tile_feat <- filter(global_quarry, tile_id == tl)
   
   # Add ecoregions as a property of quarry and mining dataset
   tile_feat <- distSaveAll$apply(sf_as_ee(tile_feat), ecoregions, spatialFilter)$map(function(feat) {
@@ -133,7 +133,7 @@ for(tl in sort(unique(global_quarry$tile_id))[1:3]){
   })
   
   # compute forest loss area 
-  res <- tile_feat$map(function(feat) {
+  gee_floss <- tile_feat$map(function(feat) {
     out_list <- lapply(treecover_mask$bandNames()$getInfo(), FUN = function(l){
       loss_area_image$mask(treecover_mask$select(l))$reduceRegion(
         reducer = ee$Reducer$sum()$group({groupField = 1}),
@@ -155,20 +155,29 @@ for(tl in sort(unique(global_quarry$tile_id))[1:3]){
     sf::st_drop_geometry()  |> 
     tibble::as_tibble()
   
-  # TODO: Clean groups...
-  ## lapply(list, function)
-  ## must save as RDF
-  res |> 
-    select(id, forest_loss = forest_loss_025) |> 
-    unnest(cols = forest_loss) |> 
-    mutate(year = 2000 + as.numeric(stringr::str_extract(forest_loss, pattern = "(?<=\"group\": ).*(?=,)")),
-           area = stringr::str_replace(forest_loss, " \\}", "END"),
-           area = as.numeric(stringr::str_extract(area, pattern = "(?<=\"sum\": ).*(?=END)")),
-           area = units::set_units(units::set_units(area, m^2), km^2)) |> 
-    dplyr::group_by(id) |> 
-    nest() |> 
-    write_rds(str_c(gee_dir, '/', str_pad(tl, width = 4, pad = "0"), '.rds'))
+  # Tidy forest loss time series
+  res_loss <- lapply(select(gee_floss, matches('forest_loss')) |> names(), function(i){
+    gee_floss |> 
+      select_at(c('id', i)) |> 
+      rename_with(~ c('id', 'forest_loss'), all_of(c('id', i))) 
+      unnest(cols = forest_loss) |> 
+      mutate(year = 2000 + as.numeric(stringr::str_extract(forest_loss, pattern = "(?<=\"group\": ).*(?=,)")),
+             area = stringr::str_replace(forest_loss, " \\}", "END"),
+             area = as.numeric(stringr::str_extract(area, pattern = "(?<=\"sum\": ).*(?=END)")),
+             area = units::set_units(units::set_units(area, m^2), km^2)) |> 
+      group_by(id) |> 
+      nest() |> 
+      ungroup() |> 
+      rename_with(~ c('id', i), all_of(c('id', 'data'))) 
+  })
   
-    dplyr::rename(!!paste0("area_", tree_cover) := area)
+  res <- select(gee_floss, -matches('forest_loss'))
+  for (i in seq_along(res_loss)) {
+    res <- left_join(res, res_loss[[i]], by = c('id' = 'id'))
+  }
+  
+  write_rds(res, str_c(gee_dir, '/', str_pad(tl, width = 4, pad = "0"), '.rds'))
+  
 }
+
 # TODO: Cluster commodities
