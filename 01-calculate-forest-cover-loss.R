@@ -6,6 +6,7 @@ library(rgeeExtra)
 library(dplyr)
 library(sf)
 library(progress)
+library(tibble)
 library(readr)
 library(tidyr)
 
@@ -69,36 +70,36 @@ distSaveAll = ee$Join$saveAll(matchesKey = 'ecoregion')
 
 # ------------------------------------------------------------------------------
 # define processing tiles
-# tiles <- rbind(c(-180,-90), c(180,-90), c(180,90), c(-180,90), c(-180,-90)) |> 
-#   list() |> 
-#   st_polygon() |> 
-#   st_sfc(crs = 'EPSG:4326') |> 
+# tiles <- rbind(c(-180,-90), c(180,-90), c(180,90), c(-180,90), c(-180,-90)) |>
+#   list() |>
+#   st_polygon() |>
+#   st_sfc(crs = 'EPSG:4326') |>
 #   st_make_grid(
 #     cellsize = c(5, 5),
 #     what = "polygons",
 #     square = TRUE,
 #     flat_topped = FALSE
-#   ) |> 
-#   st_as_sf() |> 
+#   ) |>
+#   st_as_sf() |>
 #   mutate(tile_id = sapply(x, FUN = function(x){
-#     st_coordinates(x) |> 
+#     st_coordinates(x) |>
 #       as_tibble() |>
-#       group_by(L1, L2) |> 
-#       summarise(X = min(X), Y = min(Y), .groups = 'drop') |> 
+#       group_by(L1, L2) |>
+#       summarise(X = min(X), Y = min(Y), .groups = 'drop') |>
 #       transmute(tile_id = str_c(
-#         ifelse(X < 0, 
-#                str_c(str_pad(abs(X), width = 3, pad = '0'), 'W'), 
+#         ifelse(X < 0,
+#                str_c(str_pad(abs(X), width = 3, pad = '0'), 'W'),
 #                str_c(str_pad(abs(X), width = 3, pad = '0'), 'E')),
-#         ifelse(Y < 0, 
-#                str_c(str_pad(abs(Y), width = 2, pad = '0'), 'S'), 
+#         ifelse(Y < 0,
+#                str_c(str_pad(abs(Y), width = 2, pad = '0'), 'S'),
 #                str_c(str_pad(abs(Y), width = 2, pad = '0'), 'N'))
-#       )) |> 
+#       )) |>
 #       as.character()
-#   })) 
+#   }))
 
 # ------------------------------------------------------------------------------
 # define mining and quarry processing tiles
-n_tile_features <- 300
+n_tile_features <- 100
 global_quarry <- st_read(global_quarry_path, quiet = TRUE) |> 
   filter(country != "Antarctica") |> # OSM includes some polygons in Antarctica: Removed 
   mutate(tile_id = rep(1:n(), each = n_tile_features)[1:n()])
@@ -108,75 +109,95 @@ global_quarry <- st_read(global_quarry_path, quiet = TRUE) |>
 # calculate forest cover loss within mining and quarry per tile
 gee_dir <- str_c("./data/gee_tiles_forest_loss_", data_version)
 dir.create(gee_dir, showWarnings = FALSE, recursive = TRUE)
-pb <- progress_bar$new(total = length(unique(global_quarry$tile_id)))
+# pb <- progress_bar$new(total = length(unique(global_quarry$tile_id)))
+pb <- progress_bar$new(
+  format = "  downloading [:bar] :percent in :elapsed",
+  total = length(unique(global_quarry$tile_id)), clear = FALSE, width= 60)
+# pb <- progress_bar$new(total = 3)
 for(tl in sort(unique(global_quarry$tile_id))){
   
   pb$tick()
   
-  tile_feat <- filter(global_quarry, tile_id == tl)
+  f <- str_c(gee_dir, '/', str_pad(tl, width = 4, pad = "0"), '.rds')
   
-  # Add ecoregions as a property of quarry and mining dataset
-  tile_feat <- distSaveAll$apply(sf_as_ee(tile_feat), ecoregions, spatialFilter)$map(function(feat) {
-    eco <- ee$Feature(ee$List(feat$get('ecoregion'))$get(0))
-    ECO_ID <- eco$get('ECO_ID')
-    ECO_NAME <- eco$get('ECO_NAME')
-    BIOME_NAME <- eco$get('BIOME_NAME')
-    BIOME_NUM <- eco$get('BIOME_NUM')
-    properties <- feat$propertyNames()
-    selectProperties <- properties$filter(ee$Filter$neq('item', 'ecoregion'))
-    return(feat$select(selectProperties)$set(
-      'ecoregion_id', ECO_ID,
-      'ecoregion', ECO_NAME,
-      'biome_id', BIOME_NUM,
-      'biome', BIOME_NAME
-    ))
-  })
-  
-  # compute forest loss area 
-  gee_floss <- tile_feat$map(function(feat) {
-    out_list <- lapply(treecover_mask$bandNames()$getInfo(), FUN = function(l){
-      loss_area_image$mask(treecover_mask$select(l))$reduceRegion(
-        reducer = ee$Reducer$sum()$group({groupField = 1}),
-        geometry = feat$geometry(),
-        scale = 30,
-        tileScale = 2
-      )$rename(list("groups"), list(l))
-    })
-    out_dic <- out_list[[1]]
-    for (i in 1:length(out_list)) {
-      out_dic <-out_dic$combine({reducer = out_list[[i]]})
+  if(!file.exists(f)){
+
+    # compute forest loss area 
+    gee_floss <- try(error, silent = TRUE)
+    while (class(gee_floss)=="try-error")
+    {
+      # Add ecoregions as a property of quarry and mining dataset
+      tile_feat <- filter(global_quarry, tile_id == tl)
+      tile_feat <- distSaveAll$apply(sf_as_ee(tile_feat), ecoregions, spatialFilter)$map(function(feat) {
+        eco <- ee$Feature(ee$List(feat$get('ecoregion'))$get(0))
+        ECO_ID <- eco$get('ECO_ID')
+        ECO_NAME <- eco$get('ECO_NAME')
+        BIOME_NAME <- eco$get('BIOME_NAME')
+        BIOME_NUM <- eco$get('BIOME_NUM')
+        properties <- feat$propertyNames()
+        selectProperties <- properties$filter(ee$Filter$neq('item', 'ecoregion'))
+        return(feat$select(selectProperties)$set(
+          'ecoregion_id', ECO_ID,
+          'ecoregion', ECO_NAME,
+          'biome_id', BIOME_NUM,
+          'biome', BIOME_NAME
+        ))
+      })
+      
+      # system.time(
+      gee_floss <- try(tile_feat$map(function(feat) {
+        out_list <- lapply(treecover_mask$bandNames()$getInfo(), FUN = function(l){
+          loss_area_image$mask(treecover_mask$select(l))$reduceRegion(
+            reducer = ee$Reducer$sum()$group({groupField = 1}),
+            geometry = feat$geometry(),
+            scale = 30,
+            tileScale = 2,
+            maxPixels = 1e13
+          )$rename(list("groups"), list(l))
+        })
+        out_dic <- out_list[[1]]
+        for (i in 1:length(out_list)) {
+          out_dic <-out_dic$combine({reducer = out_list[[i]]})
+        }
+        ee$Feature(
+          feat$geometry()$centroid(100),
+          out_dic
+        )$copyProperties(feat)
+      }) |> 
+        ee_as_sf() |>
+        st_drop_geometry()  |> 
+        as_tibble())
+      # )
+      if(class(gee_floss)=="try-error"){
+        Sys.sleep(600)
+      }
     }
-    ee$Feature(
-      feat$geometry()$centroid(100),
-      out_dic
-    )$copyProperties(feat)
-  }) |> 
-    ee_as_sf() |>
-    sf::st_drop_geometry()  |> 
-    tibble::as_tibble()
-  
-  # Tidy forest loss time series
-  res_loss <- lapply(select(gee_floss, matches('forest_loss')) |> names(), function(i){
-    gee_floss |> 
-      select_at(c('id', i)) |> 
-      rename_with(~ c('id', 'forest_loss'), all_of(c('id', i))) |>  
-      unnest(cols = forest_loss) |> 
-      mutate(year = 2000 + as.numeric(stringr::str_extract(forest_loss, pattern = "(?<=\"group\": ).*(?=,)")),
-             area = stringr::str_replace(forest_loss, " \\}", "END"),
-             area = as.numeric(stringr::str_extract(area, pattern = "(?<=\"sum\": ).*(?=END)")),
-             area = units::set_units(units::set_units(area, m^2), km^2)) |> 
-      group_by(id) |> 
-      nest() |> 
-      ungroup() |> 
-      rename_with(~ c('id', i), all_of(c('id', 'data'))) 
-  })
-  
-  res <- select(gee_floss, -matches('forest_loss'))
-  for (i in seq_along(res_loss)) {
-    res <- left_join(res, res_loss[[i]], by = c('id' = 'id'))
+    
+    # Tidy forest loss time series
+    res_loss <- lapply(select(gee_floss, matches('forest_loss')) |> names(), function(i){
+      gee_floss |> 
+        select_at(c('id', i)) |> 
+        rename_with(~ c('id', 'forest_loss'), all_of(c('id', i))) |>  
+        filter(lengths(forest_loss) != 0) |> 
+        unnest(cols = forest_loss) |> 
+        mutate(year = 2000 + as.numeric(stringr::str_extract(forest_loss, pattern = "(?<=\"group\": ).*(?=,)")),
+               area_forest_loss = stringr::str_replace(forest_loss, " \\}", "END"),
+               area_forest_loss = as.numeric(stringr::str_extract(area_forest_loss, pattern = "(?<=\"sum\": ).*(?=END)")),
+               area_forest_loss = units::set_units(units::set_units(area_forest_loss, m^2), km^2)) |> 
+        select(-forest_loss) |> 
+        group_by(id) |> 
+        nest() |> 
+        ungroup() |> 
+        rename_with(~ c('id', i), all_of(c('id', 'data'))) 
+    })
+    
+    res <- select(gee_floss, -matches('forest_loss'))
+    for (i in seq_along(res_loss)) {
+      res <- left_join(res, res_loss[[i]], by = c('id' = 'id'))
+    }
+    
+    write_rds(res, f) 
   }
-  
-  write_rds(res, str_c(gee_dir, '/', str_pad(tl, width = 4, pad = "0"), '.rds'))
   
 }
 
