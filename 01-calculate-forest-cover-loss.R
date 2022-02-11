@@ -114,6 +114,7 @@ pb <- progress_bar$new(
   format = "  downloading [:bar] :percent in :elapsed",
   total = length(unique(global_quarry$tile_id)), clear = FALSE, width= 60)
 # pb <- progress_bar$new(total = 3)
+# the for loop sends smaller queries to gee: the total processing time is ~24h
 for(tl in sort(unique(global_quarry$tile_id))){
   
   pb$tick()
@@ -122,28 +123,28 @@ for(tl in sort(unique(global_quarry$tile_id))){
   
   if(!file.exists(f)){
 
+    # Add ecoregions as a property of quarry and mining dataset
+    tile_feat <- filter(global_quarry, tile_id == tl)
+    tile_feat <- distSaveAll$apply(sf_as_ee(tile_feat), ecoregions, spatialFilter)$map(function(feat) {
+      eco <- ee$Feature(ee$List(feat$get('ecoregion'))$get(0))
+      ECO_ID <- eco$get('ECO_ID')
+      ECO_NAME <- eco$get('ECO_NAME')
+      BIOME_NAME <- eco$get('BIOME_NAME')
+      BIOME_NUM <- eco$get('BIOME_NUM')
+      properties <- feat$propertyNames()
+      selectProperties <- properties$filter(ee$Filter$neq('item', 'ecoregion'))
+      return(feat$select(selectProperties)$set(
+        'ecoregion_id', ECO_ID,
+        'ecoregion', ECO_NAME,
+        'biome_id', BIOME_NUM,
+        'biome', BIOME_NAME
+      ))
+    })
+    
     # compute forest loss area 
     gee_floss <- try(error, silent = TRUE)
     while (class(gee_floss)=="try-error")
     {
-      # Add ecoregions as a property of quarry and mining dataset
-      tile_feat <- filter(global_quarry, tile_id == tl)
-      tile_feat <- distSaveAll$apply(sf_as_ee(tile_feat), ecoregions, spatialFilter)$map(function(feat) {
-        eco <- ee$Feature(ee$List(feat$get('ecoregion'))$get(0))
-        ECO_ID <- eco$get('ECO_ID')
-        ECO_NAME <- eco$get('ECO_NAME')
-        BIOME_NAME <- eco$get('BIOME_NAME')
-        BIOME_NUM <- eco$get('BIOME_NUM')
-        properties <- feat$propertyNames()
-        selectProperties <- properties$filter(ee$Filter$neq('item', 'ecoregion'))
-        return(feat$select(selectProperties)$set(
-          'ecoregion_id', ECO_ID,
-          'ecoregion', ECO_NAME,
-          'biome_id', BIOME_NUM,
-          'biome', BIOME_NAME
-        ))
-      })
-      
       # system.time(
       gee_floss <- try(tile_feat$map(function(feat) {
         out_list <- lapply(treecover_mask$bandNames()$getInfo(), FUN = function(l){
@@ -169,7 +170,7 @@ for(tl in sort(unique(global_quarry$tile_id))){
         as_tibble())
       # )
       if(class(gee_floss)=="try-error"){
-        Sys.sleep(600)
+        Sys.sleep(120)
       }
     }
     

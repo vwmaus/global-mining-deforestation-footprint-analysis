@@ -11,44 +11,59 @@ library(foreach)
 library(doParallel)
 
 # ------------------------------------------------------------------------------
-# read input data
+# set input data version 
 data_version <- "20220203"
-mining_areas <- 
-  str_c("./data/global_mining_and_quarry_",data_version,".gpkg") |> 
-  st_read() |> 
-  mutate(dataset = "areas")
+path_mining_area <- str_c("./data/global_mining_and_quarry_",data_version,".gpkg") 
+path_mining_commodities <- "./data/snl/mining_commodities.gpkg"
 
-# This dataset was extracted from the SNL databse which requires a license
-mining_commodities <- st_read("./data/snl/mining_commodities.gpkg") |> 
-  mutate(id = str_pad(id, width = 7, pad = 0), dataset = "commodities")
+# ------------------------------------------------------------------------------
+# prepare datasets for clustering
+path_clusting_dataset <- str_c("./data/snl/clustering_dataset_", data_version, ".gpkg")
+create_clusting_dataset <- function(){
+  st_read(path_mining_area, quiet = TRUE) |> 
+    mutate(id = str_c("A", id)) |> 
+    # The dataset below was extracted from the SNL database which requires license
+    bind_rows(st_read(path_mining_commodities, quiet = TRUE) |> 
+                mutate(id = str_c("C", str_pad(id, width = 7, pad = 0), dataset = "commodities"))) |> 
+    st_write(path_clusting_dataset, layer = "mining_features", delete_dsn = TRUE, quiet = TRUE)  
+  return(NULL)
+}
+create_clusting_dataset()
 
 # ------------------------------------------------------------------------------
 # declare function to compute distance matrices for each country
 calc_dist_matrix <-
   function(x,
+           in_path,
            split_att,
+           layer,
            output_dir = ".",
            pb = NULL) {
     
     if(!is.null(pb)) pb$tick()
     
+    gc()
+    
     path_features_dist_meter <- 
-      stringr::str_glue("{output_dir}/{x[[split_att]][1]}.rds")
+      stringr::str_glue("{output_dir}/{x}.rds")
     
     dir.create(output_dir, showWarnings = FALSE, recursive = TRUE)
     
     # stop processing if job has less than two features ------------------------
-      if( nrow(x) < 2 ){
-        return(NULL)
-      }
+    x <- st_read(
+      dsn = in_path, 
+      query = str_c("SELECT id, geom FROM ", layer, " WHERE isoa3 = \"", x, "\""), 
+      quiet = TRUE)
+    
+    if( nrow(x) < 2 ){
+      return(NULL)
+    }
     
     # compute geographical distance in parallel --------------------------------
     if(!file.exists(path_features_dist_meter)){
       
       ids <- x$id
       x <- sf::st_geometry(x)
-      
-      
       dist_matrix <- foreach(
         xi = split(x, 1:length(x)), 
         .combine = 'rbind'
@@ -57,7 +72,6 @@ calc_dist_matrix <-
       }
       
       row.names(dist_matrix) <- ids
-      
       saveRDS(as.dist(dist_matrix), file = path_features_dist_meter)
       
     }
@@ -70,16 +84,23 @@ calc_dist_matrix <-
 # calculate distance matrix per country in parallel
 cl <- makeCluster(parallel::detectCores(), type = "FORK")
 registerDoParallel(cl)
-mine_features <- bind_rows(mining_areas, mining_commodities)
+isoa3_list <- 
+  st_read(dsn = path_clusting_dataset, quiet = TRUE,
+          query = "SELECT isoa3 FROM mining_features") |> 
+  as_tibble() |> 
+  distinct() |> 
+  arrange(isoa3)
 pb <- progress_bar$new(
   format = "  downloading [:bar] :percent in :elapsed",
-  total = length(unique(mine_features$isoa3)), clear = FALSE, width= 60)
+  total = length(isoa3_list$isoa3), clear = FALSE, width= 60)
 dist_matrix_paths <- foreach(
-  mine_split = split(mine_features, mine_features$isoa3), 
+  mine_split = isoa3_list$isoa3, 
   .combine = 'c'
 ) %do% {
   calc_dist_matrix(
     x = mine_split, 
+    in_path = path_clusting_dataset,
+    layer = "mining_features",
     split_att = "isoa3", 
     output_dir = str_c("./data/dist_matrix_", data_version),
     pb = pb)
