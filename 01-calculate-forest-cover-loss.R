@@ -2,7 +2,6 @@ library(reticulate)
 library(geojsonio)
 library(stringr)
 library(rgee)
-library(rgeeExtra)
 library(dplyr)
 library(sf)
 library(progress)
@@ -69,41 +68,11 @@ spatialFilter <- ee$Filter$intersects(leftField = '.geo', rightField = '.geo', m
 distSaveAll = ee$Join$saveAll(matchesKey = 'ecoregion')
 
 # ------------------------------------------------------------------------------
-# define processing tiles
-# tiles <- rbind(c(-180,-90), c(180,-90), c(180,90), c(-180,90), c(-180,-90)) |>
-#   list() |>
-#   st_polygon() |>
-#   st_sfc(crs = 'EPSG:4326') |>
-#   st_make_grid(
-#     cellsize = c(5, 5),
-#     what = "polygons",
-#     square = TRUE,
-#     flat_topped = FALSE
-#   ) |>
-#   st_as_sf() |>
-#   mutate(tile_id = sapply(x, FUN = function(x){
-#     st_coordinates(x) |>
-#       as_tibble() |>
-#       group_by(L1, L2) |>
-#       summarise(X = min(X), Y = min(Y), .groups = 'drop') |>
-#       transmute(tile_id = str_c(
-#         ifelse(X < 0,
-#                str_c(str_pad(abs(X), width = 3, pad = '0'), 'W'),
-#                str_c(str_pad(abs(X), width = 3, pad = '0'), 'E')),
-#         ifelse(Y < 0,
-#                str_c(str_pad(abs(Y), width = 2, pad = '0'), 'S'),
-#                str_c(str_pad(abs(Y), width = 2, pad = '0'), 'N'))
-#       )) |>
-#       as.character()
-#   }))
-
-# ------------------------------------------------------------------------------
 # define mining and quarry processing tiles
 n_tile_features <- 100
 global_quarry <- st_read(global_quarry_path, quiet = TRUE) |> 
   filter(country != "Antarctica") |> # OSM includes some polygons in Antarctica: Removed 
   mutate(tile_id = rep(1:n(), each = n_tile_features)[1:n()])
-  # st_join(y = tiles, left = TRUE, join = function(x, y, ...) st_intersects(st_centroid(st_geometry(x)), y, ...))
 
 # ------------------------------------------------------------------------------
 # calculate forest cover loss within mining and quarry per tile
@@ -152,7 +121,7 @@ for(tl in sort(unique(global_quarry$tile_id))){
             reducer = ee$Reducer$sum()$group({groupField = 1}),
             geometry = feat$geometry(),
             scale = 30,
-            tileScale = 2,
+            tileScale = 0.1,
             maxPixels = 1e13
           )$rename(list("groups"), list(l))
         })
@@ -202,4 +171,41 @@ for(tl in sort(unique(global_quarry$tile_id))){
   
 }
 
-# TODO: Cluster commodities
+# ------------------------------------------------------------------------------
+# check forest loss area
+forest_loss <- 
+  foreach(x = dir(str_c("./data/gee_tiles_forest_loss_",data_version,""),
+                  pattern = ".rds$", 
+                  full.names = TRUE), 
+          .combine = "bind_rows") %do% read_rds(x)
+
+
+forest_loss_000 <- select(forest_loss, id, isoa3, biome, forest_loss_000) |> 
+  unnest(cols = forest_loss_000) |> 
+  rename(area_forest_loss_000 = area_forest_loss)
+
+forest_loss_025 <- select(forest_loss, id, forest_loss_025) |> 
+  unnest(cols = forest_loss_025) |> 
+  rename(area_loss_025 = area_forest_loss)
+
+forest_loss_050 <- select(forest_loss, id, forest_loss_050) |> 
+  unnest(cols = forest_loss_050) |> 
+  rename(area_loss_050 = area_forest_loss)
+
+forest_loss_075 <- select(forest_loss, id, forest_loss_075) |> 
+  unnest(cols = forest_loss_075) |> 
+  rename(area_loss_075 = area_forest_loss)
+
+forest_loss_100 <- select(forest_loss, id, forest_loss_100) |> 
+  unnest(cols = forest_loss_100) |> 
+  rename(area_loss_100 = area_forest_loss)
+
+forest_loss_000 |> 
+  full_join(forest_loss_025) |> 
+  full_join(forest_loss_050) |> 
+  full_join(forest_loss_075) |> 
+  full_join(forest_loss_100) |> 
+  group_by(biome) |> 
+  summarise(across(matches("area_loss"), sum, na.rm = TRUE)) |> 
+  arrange(desc(area_loss_000)) |> 
+  summarise(across(matches("area_loss"), sum))
