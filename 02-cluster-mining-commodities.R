@@ -29,7 +29,7 @@ create_clusting_dataset <- function(){
     mutate(id = str_c("A", id)) |> 
     # The dataset below was extracted from the SNL database which requires license
     bind_rows(st_read(path_mining_commodities, quiet = TRUE) |> 
-                mutate(id = str_c("C", str_pad(id, width = 7, pad = 0), dataset = "commodities"))) |> 
+                mutate(id = str_c("C", str_pad(id, width = 7, pad = 0)))) |> 
     st_write(path_clusting_dataset, layer = "mining_features", delete_dsn = TRUE, quiet = TRUE)
   return(NULL)
 }
@@ -46,7 +46,7 @@ isoa3_list <-
 # calculate distance matrix per country in parallel
 source("./R/calc_dist_matrix.R")
 pb <- progress_bar$new(
-  format = "  downloading [:bar] :percent in :elapsed",
+  format = "  calculating distance matrix [:bar] :percent in :elapsed",
   total = length(isoa3_list$isoa3), clear = FALSE, width= 60)
 dist_files <- foreach(
   mine_split = isoa3_list$isoa3, 
@@ -92,6 +92,8 @@ mine_clusters <- foreach(
   
 }
 
+write_csv(mine_clusters, file = "./data/hcluster_results.csv")
+
 # create cluster ids concordance
 source("./R/fun_collapse_groups.R")
 hcluster_concordance <- mine_clusters |> 
@@ -107,7 +109,8 @@ sum(hcluster_concordance$area)
 hcluster_concordance |> 
   mutate(comm = is.na(list_of_commodities)) |> 
   group_by(comm) |> 
-  summarise(area = sum(area))
+  summarise(area = sum(area)) |> 
+  mutate(perc = area / sum(area))
 
 hcluster_concordance <- hcluster_concordance |> 
   mutate(type_of_commodities = ifelse(is.na(list_of_commodities), "Unknown", 
