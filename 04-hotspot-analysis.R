@@ -69,7 +69,3 @@ system.time(system(paste0("python3 ./python/calculate_area_weights.py \\
                           -nrow ",  2160)))
 
 r <- raster(path_to_area_weights)
-
-plot(r)
-
-crs_goode <- "+proj=igh +ellps=WGS84 +units=m +no_defs"

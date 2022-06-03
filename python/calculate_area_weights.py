@@ -5,13 +5,12 @@ import rasterio
 import fiona
 import numpy as np 
 from shapely.geometry import shape, box, MultiPolygon, Polygon
-from shapely.validation import make_valid
+from shapely.validation import make_valid, explain_validity
+from shapely.ops import linemerge, unary_union, polygonize
 from rasterio import features
 from affine import Affine
 import multiprocessing
 from functools import partial
-from shapely.ops import linemerge, unary_union, polygonize
-from shapely.validation import explain_validity
 
 # initiate the parser
 parser = argparse.ArgumentParser()
@@ -71,7 +70,6 @@ if __name__ == "__main__":
    dx = abs((xmax - xmin) / dim[1])
    affine_trans = Affine(dx, 0.0, xmin, 0.0, -dy, ymax)
 
-
    # open input geometries and transform to destination crs 
    feat = fiona.open(args.inputfile)
 
@@ -84,7 +82,7 @@ if __name__ == "__main__":
    print(geom.is_valid)
    geom = geom[~geom.is_valid]
    print(geom.is_valid)
-   
+
    if geom.is_empty:
       sys.exit("warning: Nothing to do. There are not geometries overlapping the bounding box. Check the bounding coordinates and the polygons CRS")
    
