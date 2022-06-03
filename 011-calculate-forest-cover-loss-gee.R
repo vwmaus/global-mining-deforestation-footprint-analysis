@@ -9,7 +9,7 @@ library(units)
 # ------------------------------------------------------------------------------
 # get forest loss files 
 forest_loss_path <- 
-  dir("./data/gee_platform_forest_loss_20220203", 
+  dir("./data/gee_platform_forest_loss_2022020", 
       pattern = "tree_cover_loss_mines_", full.names = TRUE)
 
 # ------------------------------------------------------------------------------
@@ -48,8 +48,8 @@ dplyr::summarise_all(select(out, -id, -year), sum, na.rm = TRUE) |>
          area_forest_loss_075, area_forest_loss_100)
 
 # ------------------------------------------------------------------------------
-# add attributes 
-mines_gee <- st_read("./data/gee_platform_forest_loss_20220203/mining_features_20220203.geojson", quiet = TRUE)
+# add attributes
+mines_gee <- st_read("./data/gee_platform_forest_loss_2022020/mining_features_20220203.geojson", quiet = TRUE)
 
 mines_gee |> 
   st_drop_geometry() |>
@@ -57,7 +57,4 @@ mines_gee |>
   select(id, isoa3, country, ecoregion, biome) |> 
   right_join(out) |>
   readr::write_csv("./data/global_mining_and_quarry_forest_loss.csv")
-
-
-
 

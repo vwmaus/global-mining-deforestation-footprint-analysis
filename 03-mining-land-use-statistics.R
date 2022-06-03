@@ -20,9 +20,14 @@ path_forest_loss <- "./data/global_mining_and_quarry_forest_loss.csv"
 
 # ------------------------------------------------------------------------------
 # read data -- all area is in km2 
-forest_loss <- read_csv(path_forest_loss) 
+forest_loss <- read_csv(path_forest_loss)
 
-mining_cluster <- read_csv(path_mining_cluster) 
+mining_cluster <- read_csv(path_mining_cluster)
+
+mining_cluster |> 
+  group_by(type_of_commodities) |> 
+  summarise(area = sum(area)) |> 
+  mutate(per = area / sum(area))
 
 # ------------------------------------------------------------------------------
 # country mining area statistics
@@ -64,7 +69,7 @@ gp <- mining_cluster |>
   scale_y_continuous(labels = label_number(scale = 1e-6, accuracy = 0.1)) + 
   ylab("Area (M ha)")
 
-ggsave(filename = "./output/country_mining_area.pdf", plot = gp, bg = "#ffffff",
+ggsave(filename = "./output/country_mining_area.png", plot = gp, bg = "#ffffff",
        width = 360, height = 100, units = "mm", scale = 1)
 
 # ------------------------------------------------------------------------------
@@ -110,8 +115,16 @@ gp <- select(forest_loss, id, area = area_forest_loss_000) |>
   scale_y_continuous(labels = label_number(scale = 1e-3, accuracy = 1)) + 
   ylab("Area (K ha)")
 
-ggsave(filename = "./output/country_mining_forest_loss_area.pdf", plot = gp, bg = "#ffffff",
+ggsave(filename = "./output/country_mining_forest_loss_area.png", plot = gp, bg = "#ffffff",
        width = 360, height = 100, units = "mm", scale = 1)
+
+
+select(forest_loss, id, area = area_forest_loss_000) |> 
+  mutate(id = str_c("A", id)) |> 
+  left_join(select(mining_cluster, -area)) |> 
+  group_by(type_of_commodities) |> 
+  summarise(area = sum(area, na.rm = TRUE), .groups = "drop") |> 
+  mutate(perc = area / sum(area))
 
 # ------------------------------------------------------------------------------
 # global forest loss time series
@@ -139,13 +152,14 @@ gp <- forest_loss_ts |>
         panel.grid.major.x = element_blank(),
         panel.grid.minor.x = element_blank(),
         plot.title = element_text(vjust = - 8, hjust = 0.02)) +
-  scale_fill_viridis_d(option = "mako", direction = 1, begin = 0.2, end = 0.8,
-                       guide = guide_legend(direction = "horizontal", title.position = "top")) + 
+  scale_fill_grey(start = 0.6, end = 0, guide = guide_legend(direction = "horizontal", title.position = "top")) +
+  # scale_fill_viridis_d(option = "mako", direction = 1, begin = 0.2, end = 0.8,
+                       # guide = guide_legend(direction = "horizontal", title.position = "top")) + 
   scale_y_continuous(labels = label_number(scale = 1e-3, accuracy = 1)) + 
   ylab("Area (K ha)") + 
   ggtitle("Global") 
 
-ggsave(filename = "./output/forest_loss_area_time_series_global.pdf", plot = gp, bg = "#ffffff",
+ggsave(filename = "./output/forest_loss_area_time_series_global.png", plot = gp, bg = "#ffffff",
        width = 160, height = 120, units = "mm", scale = 1)
 
 
@@ -181,8 +195,9 @@ gp <- forest_loss_ts |>
         panel.grid.major.x = element_blank(),
         panel.grid.minor.x = element_blank(),
         plot.title = element_text(vjust = - 8, hjust = 0.02)) +
-  scale_fill_viridis_d(option = "mako", direction = 1, begin = 0.2, end = 0.8,
-                       guide = guide_legend(direction = "horizontal", title.position = "top")) + 
+  scale_fill_grey(start = 0.6, end = 0, guide = guide_legend(direction = "horizontal", title.position = "top")) +
+  # scale_fill_viridis_d(option = "mako", direction = 1, begin = 0.2, end = 0.8,
+  #                      guide = guide_legend(direction = "horizontal", title.position = "top")) + 
   scale_y_continuous(labels = label_number(scale = 1e-3, accuracy = 1), breaks = c(seq(0, 20000, 10000))) + 
   ylab("Area (K ha)") + 
   ggtitle(country) 
@@ -203,7 +218,7 @@ gp <- forest_loss_ts |>
   #                               label = paste("P-value = ", signif(..p.value.., digits = 4), sep = "")),
   #                 label.x.npc = 'right', label.y.npc = 0.35, size = 3)
 
-ggsave(filename = str_c("./output/forest_loss_area_time_series_",str_to_lower(country),".pdf"), plot = gp, bg = "#ffffff",
+ggsave(filename = str_c("./output/forest_loss_area_time_series_",str_to_lower(country),".png"), plot = gp, bg = "#ffffff",
        width = 160, height = 120, units = "mm", scale = 1)
 
 
@@ -239,8 +254,9 @@ gp <- forest_loss_ts |>
         panel.grid.major.x = element_blank(),
         panel.grid.minor.x = element_blank(),
         plot.title = element_text(vjust = - 8, hjust = 0.02)) +
-  scale_fill_viridis_d(option = "mako", direction = 1, begin = 0.2, end = 0.8,
-                       guide = guide_legend(direction = "horizontal", title.position = "top")) + 
+  # scale_fill_viridis_d(option = "mako", direction = 1, begin = 0.2, end = 0.8,
+  #                      guide = guide_legend(direction = "horizontal", title.position = "top")) + 
+  scale_fill_grey(start = 0.6, end = 0, guide = guide_legend(direction = "horizontal", title.position = "top")) +
   scale_y_continuous(labels = label_number(scale = 1e-3, accuracy = 1), breaks = c(seq(0, 40000, 20000))) + 
   ylab("Area (K ha)") + 
   ggtitle(country) 
@@ -261,7 +277,7 @@ gp <- forest_loss_ts |>
 #                               label = paste("P-value = ", signif(..p.value.., digits = 4), sep = "")),
 #                 label.x.npc = 'right', label.y.npc = 0.35, size = 3)
 
-ggsave(filename = str_c("./output/forest_loss_area_time_series_",str_to_lower(country),".pdf"), plot = gp, bg = "#ffffff",
+ggsave(filename = str_c("./output/forest_loss_area_time_series_",str_to_lower(country),".png"), plot = gp, bg = "#ffffff",
        width = 160, height = 120, units = "mm", scale = 1)
 
 
@@ -297,8 +313,9 @@ gp <- forest_loss_ts |>
         panel.grid.major.x = element_blank(),
         panel.grid.minor.x = element_blank(),
         plot.title = element_text(vjust = - 8, hjust = 0.02)) +
-  scale_fill_viridis_d(option = "mako", direction = 1, begin = 0.2, end = 0.8,
-                       guide = guide_legend(direction = "horizontal", title.position = "top")) + 
+  # scale_fill_viridis_d(option = "mako", direction = 1, begin = 0.2, end = 0.8,
+  #                      guide = guide_legend(direction = "horizontal", title.position = "top")) + 
+  scale_fill_grey(start = 0.6, end = 0, guide = guide_legend(direction = "horizontal", title.position = "top")) +
   scale_y_continuous(labels = label_number(scale = 1e-3, accuracy = 1), breaks = c(seq(0, 10000, 5000))) + 
   ylab("Area (K ha)") + 
   ggtitle(country) 
@@ -319,7 +336,7 @@ gp <- forest_loss_ts |>
 #                               label = paste("P-value = ", signif(..p.value.., digits = 4), sep = "")),
 #                 label.x.npc = 'right', label.y.npc = 0.35, size = 3)
 
-ggsave(filename = str_c("./output/forest_loss_area_time_series_",str_to_lower(country),".pdf"), plot = gp, bg = "#ffffff",
+ggsave(filename = str_c("./output/forest_loss_area_time_series_",str_to_lower(country),".png"), plot = gp, bg = "#ffffff",
        width = 160, height = 120, units = "mm", scale = 1)
 
 
@@ -355,8 +372,9 @@ gp <- forest_loss_ts |>
         panel.grid.major.x = element_blank(),
         panel.grid.minor.x = element_blank(),
         plot.title = element_text(vjust = - 8, hjust = 0.02)) +
-  scale_fill_viridis_d(option = "mako", direction = 1, begin = 0.2, end = 0.8,
-                       guide = guide_legend(direction = "horizontal", title.position = "top")) + 
+  # scale_fill_viridis_d(option = "mako", direction = 1, begin = 0.2, end = 0.8,
+  #                      guide = guide_legend(direction = "horizontal", title.position = "top")) + 
+  scale_fill_grey(start = 0.6, end = 0, guide = guide_legend(direction = "horizontal", title.position = "top")) +
   scale_y_continuous(labels = label_number(scale = 1e-3, accuracy = 1), breaks = c(seq(0, 10000, 2000))) + 
   ylab("Area (K ha)") + 
   ggtitle(country) 
@@ -377,7 +395,7 @@ gp <- forest_loss_ts |>
 #                               label = paste("P-value = ", signif(..p.value.., digits = 4), sep = "")),
 #                 label.x.npc = 'right', label.y.npc = 0.35, size = 3)
 
-ggsave(filename = str_c("./output/forest_loss_area_time_series_",str_to_lower(country),".pdf"), plot = gp, bg = "#ffffff",
+ggsave(filename = str_c("./output/forest_loss_area_time_series_",str_to_lower(country),".png"), plot = gp, bg = "#ffffff",
        width = 160, height = 120, units = "mm", scale = 1)
 
 # ------------------------------------------------------------------------------
@@ -412,8 +430,9 @@ gp <- forest_loss_ts |>
         panel.grid.major.x = element_blank(),
         panel.grid.minor.x = element_blank(),
         plot.title = element_text(vjust = - 8, hjust = 0.02)) +
-  scale_fill_viridis_d(option = "mako", direction = 1, begin = 0.2, end = 0.8,
-                       guide = guide_legend(direction = "horizontal", title.position = "top")) + 
+  # scale_fill_viridis_d(option = "mako", direction = 1, begin = 0.2, end = 0.8,
+  #                      guide = guide_legend(direction = "horizontal", title.position = "top")) + 
+  scale_fill_grey(start = 0.6, end = 0, guide = guide_legend(direction = "horizontal", title.position = "top")) +
   scale_y_continuous(labels = label_number(scale = 1e-3, accuracy = 1), breaks = c(seq(0, 10000, 2000)), 
                      limits = c(0, 9000)) + 
   ylab("Area (K ha)") + 
@@ -435,7 +454,7 @@ gp <- forest_loss_ts |>
 #                               label = paste("P-value = ", signif(..p.value.., digits = 4), sep = "")),
 #                 label.x.npc = 'right', label.y.npc = 0.35, size = 3)
 
-ggsave(filename = str_c("./output/forest_loss_area_time_series_",str_to_lower(country),".pdf"), plot = gp, bg = "#ffffff",
+ggsave(filename = str_c("./output/forest_loss_area_time_series_",str_to_lower(country),".png"), plot = gp, bg = "#ffffff",
        width = 160, height = 120, units = "mm", scale = 1)
 
 # ------------------------------------------------------------------------------
@@ -470,8 +489,9 @@ gp <- forest_loss_ts |>
         panel.grid.major.x = element_blank(),
         panel.grid.minor.x = element_blank(),
         plot.title = element_text(vjust = - 8, hjust = 0.02)) +
-  scale_fill_viridis_d(option = "mako", direction = 1, begin = 0.2, end = 0.8,
-                       guide = guide_legend(direction = "horizontal", title.position = "top")) + 
+  # scale_fill_viridis_d(option = "mako", direction = 1, begin = 0.2, end = 0.8,
+  #                      guide = guide_legend(direction = "horizontal", title.position = "top")) + 
+  scale_fill_grey(start = 0.6, end = 0, guide = guide_legend(direction = "horizontal", title.position = "top")) +
   scale_y_continuous(labels = label_number(scale = 1e-3, accuracy = 1), breaks = c(seq(0, 20000, 5000))) + 
   ylab("Area (K ha)") + 
   ggtitle(country) 
@@ -492,5 +512,16 @@ gp <- forest_loss_ts |>
 #                               label = paste("P-value = ", signif(..p.value.., digits = 4), sep = "")),
 #                 label.x.npc = 'right', label.y.npc = 0.35, size = 3)
 
-ggsave(filename = str_c("./output/forest_loss_area_time_series_",str_to_lower(country),".pdf"), plot = gp, bg = "#ffffff",
+ggsave(filename = str_c("./output/forest_loss_area_time_series_",str_to_lower(country),".png"), plot = gp, bg = "#ffffff",
        width = 160, height = 120, units = "mm", scale = 1)
+
+
+# ------------------------------------------------------------------------------
+# Table: Country tree cover extent
+select(forest_loss, id, area = area_forest_loss_000_p) |> 
+  mutate(id = str_c("A", id)) |> 
+  left_join(select(mining_cluster, -area)) |> 
+  group_by(type_of_commodities) |> 
+  summarise(area = sum(area, na.rm = TRUE), .groups = "drop") |> 
+  mutate(perc = area / sum(area))
+
