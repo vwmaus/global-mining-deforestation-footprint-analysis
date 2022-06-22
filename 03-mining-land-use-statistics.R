@@ -11,6 +11,8 @@ library(foreach)
 library(viridis)
 library(ggpubr)
 
+font_size = 12
+
 # ------------------------------------------------------------------------------
 # set input data version 
 data_version <- "20220203"
@@ -57,8 +59,8 @@ gp <- mining_cluster |>
   geom_bar(stat="identity") + 
   theme_linedraw() + 
   theme(legend.position = c(0.94, 0.74),
-        legend.text = element_text(size = 8),
-        legend.title = element_text(size = 8),
+        legend.text = element_text(size = font_size),
+        legend.title = element_text(size = font_size),
         legend.background = element_rect(colour = "black"),
         panel.grid.major.x = element_blank(),
         panel.grid.minor.x = element_blank(),
@@ -74,7 +76,7 @@ ggsave(filename = "./output/country_mining_area.png", plot = gp, bg = "#ffffff",
 
 # ------------------------------------------------------------------------------
 # country forest loss area statistics
-threshold <- 0.996
+threshold <- 0.99
 
 country_rank <- select(forest_loss, isoa3, area = area_forest_loss_000) |> 
   group_by(isoa3) |> 
@@ -103,8 +105,8 @@ gp <- select(forest_loss, id, area = area_forest_loss_000) |>
   geom_bar(stat="identity") + 
   theme_linedraw() + 
   theme(legend.position = c(0.94, 0.74),
-        legend.text = element_text(size = 8),
-        legend.title = element_text(size = 8),
+        legend.text = element_text(size = font_size),
+        legend.title = element_text(size = font_size),
         legend.background = element_rect(colour = "black"),
         panel.grid.major.x = element_blank(),
         panel.grid.minor.x = element_blank(),
@@ -126,6 +128,19 @@ select(forest_loss, id, area = area_forest_loss_000) |>
   summarise(area = sum(area, na.rm = TRUE), .groups = "drop") |> 
   mutate(perc = area / sum(area))
 
+# base theme for bar plots 
+thm_bar <- theme_linedraw() + 
+  theme(legend.spacing.x = unit(0.1, 'cm'),
+        axis.text = ggplot2::element_text(size = font_size), 
+        text = ggplot2::element_text(size = font_size),
+        legend.text = element_text(size = font_size),
+        legend.title = element_text(size = font_size),
+        legend.background = element_blank(),
+        axis.title.x = element_blank(),
+        panel.grid.major.x = element_blank(),
+        panel.grid.minor.x = element_blank(),
+        plot.title = element_text(vjust = - 8, hjust = 0.02))
+  
 # ------------------------------------------------------------------------------
 # global forest loss time series
 forest_loss_ts <- forest_loss |> 
@@ -143,15 +158,8 @@ forest_loss_ts <- forest_loss |>
 gp <- forest_loss_ts |> 
   ggplot(aes(x = Year, y = area, fill = `Initial forest cover`)) + 
   geom_bar(stat="identity") + 
-  theme_linedraw() + 
-  theme(legend.position = c(0.23, 0.82),
-        legend.text = element_text(size = 8),
-        legend.title = element_text(size = 8),
-        legend.background = element_blank(),
-        axis.title.x = element_blank(),
-        panel.grid.major.x = element_blank(),
-        panel.grid.minor.x = element_blank(),
-        plot.title = element_text(vjust = - 8, hjust = 0.02)) +
+  thm_bar +
+  theme(legend.position = c(0.3, 0.82)) + 
   scale_fill_grey(start = 0.6, end = 0, guide = guide_legend(direction = "horizontal", title.position = "top")) +
   # scale_fill_viridis_d(option = "mako", direction = 1, begin = 0.2, end = 0.8,
                        # guide = guide_legend(direction = "horizontal", title.position = "top")) + 
@@ -164,357 +172,117 @@ ggsave(filename = "./output/forest_loss_area_time_series_global.png", plot = gp,
 
 
 # ------------------------------------------------------------------------------
-# Brazil forest loss time series
-iso3 <- "BRA"
-country <- "Brazil"
-forest_loss_ts <- forest_loss |> 
-  filter(isoa3 == iso3) |> 
-  select(year, area_forest_loss_000, area_forest_loss_025, area_forest_loss_050, 
-         area_forest_loss_075, area_forest_loss_100) |> 
-  group_by(year) |> 
-  summarise(across(everything(), sum, na.rm = TRUE)) |> 
-  filter(year > 2000, year < 2020) |> 
-  pivot_longer(cols = c(-year, -area_forest_loss_000)) |> 
-  mutate(`Initial forest cover` = str_remove(name, "area_forest_loss_") 
-         |> as.numeric() |> str_c(" %") |> factor(levels = c("100 %", "75 %", "50 %", "25 %")),
-         Year = year,
-         area = value * 100) # convert to ha 
-
-trend_df <- group_by(forest_loss_ts, year) |> 
-  summarise(area = sum(area))
-
-gp <- forest_loss_ts |> 
-  ggplot(aes(x = Year, y = area, fill = `Initial forest cover`)) + 
-  geom_bar(stat="identity") + 
-  theme_linedraw() + 
-  theme(legend.position = c(0.23, 0.75),
-        legend.text = element_text(size = 8),
-        legend.title = element_text(size = 8),
-        legend.background = element_blank(),
-        axis.title.x = element_blank(),
-        panel.grid.major.x = element_blank(),
-        panel.grid.minor.x = element_blank(),
-        plot.title = element_text(vjust = - 8, hjust = 0.02)) +
-  scale_fill_grey(start = 0.6, end = 0, guide = guide_legend(direction = "horizontal", title.position = "top")) +
-  # scale_fill_viridis_d(option = "mako", direction = 1, begin = 0.2, end = 0.8,
-  #                      guide = guide_legend(direction = "horizontal", title.position = "top")) + 
-  scale_y_continuous(labels = label_number(scale = 1e-3, accuracy = 1), breaks = c(seq(0, 20000, 10000))) + 
-  ylab("Area (K ha)") + 
-  ggtitle(country) 
-  # geom_line(mapping = aes(x = year, rollmean(area, 3, na.pad = TRUE), fill = NULL),
-  #           data = group_by(forest_loss_ts, year) |> summarise(area = sum(area)))
-  # geom_smooth(mapping = aes(x = year, y = area, fill = NULL),
-  #             data = trend_df, formula = y ~ x,
-  #              method=lm, se=FALSE, col='black', size=1, show.legend = FALSE) +
-  # stat_cor(mapping = aes(x = year, y = area, fill = NULL), data = trend_df) + 
-  # annotate("text",x=2005,y=20000,label=str_c("slope==", coef(lm(trend_df$area~trend_df$year))[2] |> round(0),"ha"),parse=TRUE)
-
-  # stat_poly_eq(mapping = aes(x = year, y = area, fill = NULL, label = paste(..rr.label..)),
-  #              data = trend_df) +
-  # stat_fit_glance(method = 'lm', data = trend_df,
-  #                 method.args = list(formula = formula),
-  #                 geom = 'text',
-  #                 mapping = aes(x = year, y = area, fill = NULL,
-  #                               label = paste("P-value = ", signif(..p.value.., digits = 4), sep = "")),
-  #                 label.x.npc = 'right', label.y.npc = 0.35, size = 3)
-
-ggsave(filename = str_c("./output/forest_loss_area_time_series_",str_to_lower(country),".png"), plot = gp, bg = "#ffffff",
-       width = 160, height = 120, units = "mm", scale = 1)
-
+# def fun country bar plots
+plot_country_bar <- function(data, legend.position = "None", breaks, iso3, country){
+  
+  fract_forest_cover <- tibble::tibble(
+    `Initial tree cover (%)` = factor(c("(0, 25]", "(25, 50]", "(50, 75]", "(75, 100]"), 
+                                      levels = c("(0, 25]", "(25, 50]", "(50, 75]", "(75, 100]")),
+    name = c("area_forest_loss_025", 
+             "area_forest_loss_050", 
+             "area_forest_loss_075", 
+             "area_forest_loss_100"))
+  
+  forest_loss_ts <- data |> 
+    filter(isoa3 == iso3) |> 
+    select(year, area_forest_loss_000, area_forest_loss_025, area_forest_loss_050, 
+           area_forest_loss_075, area_forest_loss_100) |> 
+    group_by(year) |> 
+    summarise(across(everything(), sum, na.rm = TRUE)) |> 
+    filter(year > 2000, year < 2020) |> 
+    pivot_longer(cols = c(-year, -area_forest_loss_000)) |> 
+    left_join(fract_forest_cover) |> 
+    mutate(Year = year, area = value * 100) # convert to ha 
+  
+  trend_df <- group_by(forest_loss_ts, year) |> 
+    summarise(area = sum(area))
+  
+  gp <- forest_loss_ts |> 
+    ggplot(aes(x = Year, y = area, fill = `Initial tree cover (%)`)) + 
+    geom_bar(stat="identity", width = 0.5) + 
+    theme_linedraw() + 
+    theme(legend.position = legend.position,
+          legend.spacing.x = unit(0.1, 'cm'),
+          axis.text = ggplot2::element_text(size = font_size), 
+          text = ggplot2::element_text(size = font_size),
+          legend.text = element_text(size = font_size),
+          legend.title = element_text(size = font_size),
+          legend.background = element_blank(),
+          axis.title.x = element_blank(),
+          panel.grid.major.x = element_blank(),
+          panel.grid.minor.x = element_blank(),
+          plot.title = element_text(vjust = - 8, hjust = 0.02)) + 
+    scale_fill_grey(start = .7, end = 0, guide = guide_legend(direction = "vertical", title.position = "top")) +
+    # scale_fill_viridis_d(option = "mako", direction = 1, begin = 0.2, end = 0.8,
+    #                      guide = guide_legend(direction = "horizontal", title.position = "top")) + 
+    scale_y_continuous(labels = label_number(scale = 1e-3, accuracy = 1), breaks = breaks) + 
+    scale_x_continuous(labels = seq(2000, 2015, 5), breaks = seq(2000, 2015, 5)) + 
+    ylab("Area (K ha)") + 
+    ggtitle(country)
+  
+  ggsave(filename = str_c("./output/bar_forest_loss_area_time_series_",str_to_lower(country),".png"), plot = gp, bg = "#ffffff",
+         width = 100, height = 100, units = "mm", scale = 1)
+  
+}
 
 # ------------------------------------------------------------------------------
-# Brazil forest loss time series
-iso3 <- "IDN"
-country <- "Indonesia"
-forest_loss_ts <- forest_loss |> 
-  filter(isoa3 == iso3) |> 
-  select(year, area_forest_loss_000, area_forest_loss_025, area_forest_loss_050, 
-         area_forest_loss_075, area_forest_loss_100) |> 
-  group_by(year) |> 
-  summarise(across(everything(), sum, na.rm = TRUE)) |> 
-  filter(year > 2000, year < 2020) |> 
-  pivot_longer(cols = c(-year, -area_forest_loss_000)) |> 
-  mutate(`Initial forest cover` = str_remove(name, "area_forest_loss_") 
-         |> as.numeric() |> str_c(" %") |> factor(levels = c("100 %", "75 %", "50 %", "25 %")),
-         Year = year,
-         area = value * 100) # convert to ha 
+plot_country_bar(data = forest_loss, breaks = seq(0, 40000, 10000), iso3 = "IDN", country = "Indonesia")
+plot_country_bar(data = forest_loss, breaks = seq(0, 20000, 10000), iso3 = "BRA", country = "Brazil")
+plot_country_bar(data = forest_loss, breaks = seq(0, 20000, 5000), iso3 = "RUS", country = "Russia", legend.position = c(0.25, 0.7))
+plot_country_bar(data = forest_loss, breaks = seq(0, 10000, 5000), iso3 = "CAN", country = "Canada")
+plot_country_bar(data = forest_loss, breaks = seq(0, 8000, 2000), iso3 = "USA", country = "United States of America")
+plot_country_bar(data = forest_loss, breaks = seq(0, 10000, 2000), iso3 = "AUS", country = "Australia")
 
-trend_df <- group_by(forest_loss_ts, year) |> 
-  summarise(area = sum(area))
+fract_forest_cover <- tibble::tibble(
+  `Initial tree cover (%)` = factor(c("(0, 25]", "(25, 50]", "(50, 75]", "(75, 100]"), 
+                                    levels = c("(0, 25]", "(25, 50]", "(50, 75]", "(75, 100]")),
+  name = c("area_forest_loss_025", 
+           "area_forest_loss_050", 
+           "area_forest_loss_075", 
+           "area_forest_loss_100"))
+
+country_tbl <- tibble(
+  isoa3 = c("IDN", "BRA", "RUS", "CAN", "USA", "AUS"),
+  country = factor(c("Indonesia", "Brazil", "Russia", "Canada", "United States of America", "Australia"),
+                   levels = c("Indonesia", "Brazil", "Russia", "Canada", "United States of America", "Australia")))
+
+forest_loss_ts <- forest_loss |> 
+  filter(isoa3 %in% country_tbl$isoa3) |> 
+  select(isoa3, year, area_forest_loss_000, area_forest_loss_025, area_forest_loss_050, 
+         area_forest_loss_075, area_forest_loss_100) |> 
+  group_by(isoa3, year) |> 
+  summarise(across(everything(), sum, na.rm = TRUE), .groups = 'drop') |> 
+  filter(year > 2000, year < 2020) |> 
+  pivot_longer(cols = c(-year, -area_forest_loss_000, -isoa3)) |> 
+  left_join(fract_forest_cover) |> 
+  left_join(country_tbl) |> 
+  mutate(Year = year, area = value * 100) # convert to ha 
+
+trend_bar <- forest_loss_ts |> 
+  select(country, year, area_forest_loss_000) |> 
+  distinct()
 
 gp <- forest_loss_ts |> 
-  ggplot(aes(x = Year, y = area, fill = `Initial forest cover`)) + 
-  geom_bar(stat="identity") + 
+  ggplot(aes(x = Year, y = area, fill = `Initial tree cover (%)`)) + 
+  facet_wrap(~country) + 
+  geom_bar(stat="identity", width = 0.5) + 
   theme_linedraw() + 
-  theme(legend.position = c(0.23, 0.75),
-        legend.text = element_text(size = 8),
-        legend.title = element_text(size = 8),
-        legend.background = element_blank(),
-        axis.title.x = element_blank(),
-        panel.grid.major.x = element_blank(),
-        panel.grid.minor.x = element_blank(),
-        plot.title = element_text(vjust = - 8, hjust = 0.02)) +
-  # scale_fill_viridis_d(option = "mako", direction = 1, begin = 0.2, end = 0.8,
-  #                      guide = guide_legend(direction = "horizontal", title.position = "top")) + 
-  scale_fill_grey(start = 0.6, end = 0, guide = guide_legend(direction = "horizontal", title.position = "top")) +
-  scale_y_continuous(labels = label_number(scale = 1e-3, accuracy = 1), breaks = c(seq(0, 40000, 20000))) + 
-  ylab("Area (K ha)") + 
-  ggtitle(country) 
-# geom_line(mapping = aes(x = year, rollmean(area, 3, na.pad = TRUE), fill = NULL),
-#           data = group_by(forest_loss_ts, year) |> summarise(area = sum(area)))
-# geom_smooth(mapping = aes(x = year, y = area, fill = NULL),
-#             data = trend_df, formula = y ~ x,
-#              method=lm, se=FALSE, col='black', size=1, show.legend = FALSE) +
-# stat_cor(mapping = aes(x = year, y = area, fill = NULL), data = trend_df) + 
-# annotate("text",x=2005,y=20000,label=str_c("slope==", coef(lm(trend_df$area~trend_df$year))[2] |> round(0),"ha"),parse=TRUE)
+  theme(axis.text = ggplot2::element_text(size = font_size), 
+        text = ggplot2::element_text(size = font_size),
+        legend.text = element_text(size = font_size),
+        legend.title = element_text(size = font_size),
+        legend.position = "bottom",
+        legend.direction = "horizontal",
+        legend.justification = "center",
+        legend.box.spacing = unit(0.0, "cm"),
+        legend.key.size = unit(0.3, "cm")) + 
+  scale_fill_grey(start = .7, end = 0, guide = guide_legend(direction = "horizontal", title.position = "top")) +
+  scale_y_continuous(labels = label_number(scale = 1e-3, accuracy = 1)) + 
+  scale_x_continuous(labels = seq(2000, 2015, 5), breaks = seq(2000, 2015, 5)) + 
+  ylab("Area (K ha)") 
 
-# stat_poly_eq(mapping = aes(x = year, y = area, fill = NULL, label = paste(..rr.label..)),
-#              data = trend_df) +
-# stat_fit_glance(method = 'lm', data = trend_df,
-#                 method.args = list(formula = formula),
-#                 geom = 'text',
-#                 mapping = aes(x = year, y = area, fill = NULL,
-#                               label = paste("P-value = ", signif(..p.value.., digits = 4), sep = "")),
-#                 label.x.npc = 'right', label.y.npc = 0.35, size = 3)
-
-ggsave(filename = str_c("./output/forest_loss_area_time_series_",str_to_lower(country),".png"), plot = gp, bg = "#ffffff",
-       width = 160, height = 120, units = "mm", scale = 1)
-
-
-# ------------------------------------------------------------------------------
-# Brazil forest loss time series
-iso3 <- "CAN"
-country <- "Canada"
-forest_loss_ts <- forest_loss |> 
-  filter(isoa3 == iso3) |> 
-  select(year, area_forest_loss_000, area_forest_loss_025, area_forest_loss_050, 
-         area_forest_loss_075, area_forest_loss_100) |> 
-  group_by(year) |> 
-  summarise(across(everything(), sum, na.rm = TRUE)) |> 
-  filter(year > 2000, year < 2020) |> 
-  pivot_longer(cols = c(-year, -area_forest_loss_000)) |> 
-  mutate(`Initial forest cover` = str_remove(name, "area_forest_loss_") 
-         |> as.numeric() |> str_c(" %") |> factor(levels = c("100 %", "75 %", "50 %", "25 %")),
-         Year = year,
-         area = value * 100) # convert to ha 
-
-trend_df <- group_by(forest_loss_ts, year) |> 
-  summarise(area = sum(area))
-
-gp <- forest_loss_ts |> 
-  ggplot(aes(x = Year, y = area, fill = `Initial forest cover`)) + 
-  geom_bar(stat="identity") + 
-  theme_linedraw() + 
-  theme(legend.position = c(0.23, 0.75),
-        legend.text = element_text(size = 8),
-        legend.title = element_text(size = 8),
-        legend.background = element_blank(),
-        axis.title.x = element_blank(),
-        panel.grid.major.x = element_blank(),
-        panel.grid.minor.x = element_blank(),
-        plot.title = element_text(vjust = - 8, hjust = 0.02)) +
-  # scale_fill_viridis_d(option = "mako", direction = 1, begin = 0.2, end = 0.8,
-  #                      guide = guide_legend(direction = "horizontal", title.position = "top")) + 
-  scale_fill_grey(start = 0.6, end = 0, guide = guide_legend(direction = "horizontal", title.position = "top")) +
-  scale_y_continuous(labels = label_number(scale = 1e-3, accuracy = 1), breaks = c(seq(0, 10000, 5000))) + 
-  ylab("Area (K ha)") + 
-  ggtitle(country) 
-# geom_line(mapping = aes(x = year, rollmean(area, 3, na.pad = TRUE), fill = NULL),
-#           data = group_by(forest_loss_ts, year) |> summarise(area = sum(area)))
-# geom_smooth(mapping = aes(x = year, y = area, fill = NULL),
-#             data = trend_df, formula = y ~ x,
-#              method=lm, se=FALSE, col='black', size=1, show.legend = FALSE) +
-# stat_cor(mapping = aes(x = year, y = area, fill = NULL), data = trend_df) + 
-# annotate("text",x=2005,y=20000,label=str_c("slope==", coef(lm(trend_df$area~trend_df$year))[2] |> round(0),"ha"),parse=TRUE)
-
-# stat_poly_eq(mapping = aes(x = year, y = area, fill = NULL, label = paste(..rr.label..)),
-#              data = trend_df) +
-# stat_fit_glance(method = 'lm', data = trend_df,
-#                 method.args = list(formula = formula),
-#                 geom = 'text',
-#                 mapping = aes(x = year, y = area, fill = NULL,
-#                               label = paste("P-value = ", signif(..p.value.., digits = 4), sep = "")),
-#                 label.x.npc = 'right', label.y.npc = 0.35, size = 3)
-
-ggsave(filename = str_c("./output/forest_loss_area_time_series_",str_to_lower(country),".png"), plot = gp, bg = "#ffffff",
-       width = 160, height = 120, units = "mm", scale = 1)
-
-
-# ------------------------------------------------------------------------------
-# Brazil forest loss time series
-iso3 <- "AUS"
-country <- "Australia"
-forest_loss_ts <- forest_loss |> 
-  filter(isoa3 == iso3) |> 
-  select(year, area_forest_loss_000, area_forest_loss_025, area_forest_loss_050, 
-         area_forest_loss_075, area_forest_loss_100) |> 
-  group_by(year) |> 
-  summarise(across(everything(), sum, na.rm = TRUE)) |> 
-  filter(year > 2000, year < 2020) |> 
-  pivot_longer(cols = c(-year, -area_forest_loss_000)) |> 
-  mutate(`Initial forest cover` = str_remove(name, "area_forest_loss_") 
-         |> as.numeric() |> str_c(" %") |> factor(levels = c("100 %", "75 %", "50 %", "25 %")),
-         Year = year,
-         area = value * 100) # convert to ha 
-
-trend_df <- group_by(forest_loss_ts, year) |> 
-  summarise(area = sum(area))
-
-gp <- forest_loss_ts |> 
-  ggplot(aes(x = Year, y = area, fill = `Initial forest cover`)) + 
-  geom_bar(stat="identity") + 
-  theme_linedraw() + 
-  theme(legend.position = c(0.4, 0.93),
-        legend.text = element_text(size = 8),
-        legend.title = element_text(size = 8),
-        legend.background = element_blank(),
-        axis.title.x = element_blank(),
-        panel.grid.major.x = element_blank(),
-        panel.grid.minor.x = element_blank(),
-        plot.title = element_text(vjust = - 8, hjust = 0.02)) +
-  # scale_fill_viridis_d(option = "mako", direction = 1, begin = 0.2, end = 0.8,
-  #                      guide = guide_legend(direction = "horizontal", title.position = "top")) + 
-  scale_fill_grey(start = 0.6, end = 0, guide = guide_legend(direction = "horizontal", title.position = "top")) +
-  scale_y_continuous(labels = label_number(scale = 1e-3, accuracy = 1), breaks = c(seq(0, 10000, 2000))) + 
-  ylab("Area (K ha)") + 
-  ggtitle(country) 
-# geom_line(mapping = aes(x = year, rollmean(area, 3, na.pad = TRUE), fill = NULL),
-#           data = group_by(forest_loss_ts, year) |> summarise(area = sum(area)))
-# geom_smooth(mapping = aes(x = year, y = area, fill = NULL),
-#             data = trend_df, formula = y ~ x,
-#              method=lm, se=FALSE, col='black', size=1, show.legend = FALSE) +
-# stat_cor(mapping = aes(x = year, y = area, fill = NULL), data = trend_df) + 
-# annotate("text",x=2005,y=20000,label=str_c("slope==", coef(lm(trend_df$area~trend_df$year))[2] |> round(0),"ha"),parse=TRUE)
-
-# stat_poly_eq(mapping = aes(x = year, y = area, fill = NULL, label = paste(..rr.label..)),
-#              data = trend_df) +
-# stat_fit_glance(method = 'lm', data = trend_df,
-#                 method.args = list(formula = formula),
-#                 geom = 'text',
-#                 mapping = aes(x = year, y = area, fill = NULL,
-#                               label = paste("P-value = ", signif(..p.value.., digits = 4), sep = "")),
-#                 label.x.npc = 'right', label.y.npc = 0.35, size = 3)
-
-ggsave(filename = str_c("./output/forest_loss_area_time_series_",str_to_lower(country),".png"), plot = gp, bg = "#ffffff",
-       width = 160, height = 120, units = "mm", scale = 1)
-
-# ------------------------------------------------------------------------------
-# Brazil forest loss time series
-iso3 <- "USA"
-country <- "United States of America"
-forest_loss_ts <- forest_loss |> 
-  filter(isoa3 == iso3) |> 
-  select(year, area_forest_loss_000, area_forest_loss_025, area_forest_loss_050, 
-         area_forest_loss_075, area_forest_loss_100) |> 
-  group_by(year) |> 
-  summarise(across(everything(), sum, na.rm = TRUE)) |> 
-  filter(year > 2000, year < 2020) |> 
-  pivot_longer(cols = c(-year, -area_forest_loss_000)) |> 
-  mutate(`Initial forest cover` = str_remove(name, "area_forest_loss_") 
-         |> as.numeric() |> str_c(" %") |> factor(levels = c("100 %", "75 %", "50 %", "25 %")),
-         Year = year,
-         area = value * 100) # convert to ha 
-
-trend_df <- group_by(forest_loss_ts, year) |> 
-  summarise(area = sum(area))
-
-gp <- forest_loss_ts |> 
-  ggplot(aes(x = Year, y = area, fill = `Initial forest cover`)) + 
-  geom_bar(stat="identity") + 
-  theme_linedraw() + 
-  theme(legend.position = c(0.8, 0.95),
-        legend.text = element_text(size = 8),
-        legend.title = element_text(size = 8),
-        legend.background = element_blank(),
-        axis.title.x = element_blank(),
-        panel.grid.major.x = element_blank(),
-        panel.grid.minor.x = element_blank(),
-        plot.title = element_text(vjust = - 8, hjust = 0.02)) +
-  # scale_fill_viridis_d(option = "mako", direction = 1, begin = 0.2, end = 0.8,
-  #                      guide = guide_legend(direction = "horizontal", title.position = "top")) + 
-  scale_fill_grey(start = 0.6, end = 0, guide = guide_legend(direction = "horizontal", title.position = "top")) +
-  scale_y_continuous(labels = label_number(scale = 1e-3, accuracy = 1), breaks = c(seq(0, 10000, 2000)), 
-                     limits = c(0, 9000)) + 
-  ylab("Area (K ha)") + 
-  ggtitle(country) 
-# geom_line(mapping = aes(x = year, rollmean(area, 3, na.pad = TRUE), fill = NULL),
-#           data = group_by(forest_loss_ts, year) |> summarise(area = sum(area)))
-# geom_smooth(mapping = aes(x = year, y = area, fill = NULL),
-#             data = trend_df, formula = y ~ x,
-#              method=lm, se=FALSE, col='black', size=1, show.legend = FALSE) +
-# stat_cor(mapping = aes(x = year, y = area, fill = NULL), data = trend_df) + 
-# annotate("text",x=2005,y=20000,label=str_c("slope==", coef(lm(trend_df$area~trend_df$year))[2] |> round(0),"ha"),parse=TRUE)
-
-# stat_poly_eq(mapping = aes(x = year, y = area, fill = NULL, label = paste(..rr.label..)),
-#              data = trend_df) +
-# stat_fit_glance(method = 'lm', data = trend_df,
-#                 method.args = list(formula = formula),
-#                 geom = 'text',
-#                 mapping = aes(x = year, y = area, fill = NULL,
-#                               label = paste("P-value = ", signif(..p.value.., digits = 4), sep = "")),
-#                 label.x.npc = 'right', label.y.npc = 0.35, size = 3)
-
-ggsave(filename = str_c("./output/forest_loss_area_time_series_",str_to_lower(country),".png"), plot = gp, bg = "#ffffff",
-       width = 160, height = 120, units = "mm", scale = 1)
-
-# ------------------------------------------------------------------------------
-# Brazil forest loss time series
-iso3 <- "RUS"
-country <- "Russia"
-forest_loss_ts <- forest_loss |> 
-  filter(isoa3 == iso3) |> 
-  select(year, area_forest_loss_000, area_forest_loss_025, area_forest_loss_050, 
-         area_forest_loss_075, area_forest_loss_100) |> 
-  group_by(year) |> 
-  summarise(across(everything(), sum, na.rm = TRUE)) |> 
-  filter(year > 2000, year < 2020) |> 
-  pivot_longer(cols = c(-year, -area_forest_loss_000)) |> 
-  mutate(`Initial forest cover` = str_remove(name, "area_forest_loss_") 
-         |> as.numeric() |> str_c(" %") |> factor(levels = c("100 %", "75 %", "50 %", "25 %")),
-         Year = year,
-         area = value * 100) # convert to ha 
-
-trend_df <- group_by(forest_loss_ts, year) |> 
-  summarise(area = sum(area))
-
-gp <- forest_loss_ts |> 
-  ggplot(aes(x = Year, y = area, fill = `Initial forest cover`)) + 
-  geom_bar(stat="identity") + 
-  theme_linedraw() + 
-  theme(legend.position = c(0.22, 0.8),
-        legend.text = element_text(size = 8),
-        legend.title = element_text(size = 8),
-        legend.background = element_blank(),
-        axis.title.x = element_blank(),
-        panel.grid.major.x = element_blank(),
-        panel.grid.minor.x = element_blank(),
-        plot.title = element_text(vjust = - 8, hjust = 0.02)) +
-  # scale_fill_viridis_d(option = "mako", direction = 1, begin = 0.2, end = 0.8,
-  #                      guide = guide_legend(direction = "horizontal", title.position = "top")) + 
-  scale_fill_grey(start = 0.6, end = 0, guide = guide_legend(direction = "horizontal", title.position = "top")) +
-  scale_y_continuous(labels = label_number(scale = 1e-3, accuracy = 1), breaks = c(seq(0, 20000, 5000))) + 
-  ylab("Area (K ha)") + 
-  ggtitle(country) 
-# geom_line(mapping = aes(x = year, rollmean(area, 3, na.pad = TRUE), fill = NULL),
-#           data = group_by(forest_loss_ts, year) |> summarise(area = sum(area)))
-# geom_smooth(mapping = aes(x = year, y = area, fill = NULL),
-#             data = trend_df, formula = y ~ x,
-#              method=lm, se=FALSE, col='black', size=1, show.legend = FALSE) +
-# stat_cor(mapping = aes(x = year, y = area, fill = NULL), data = trend_df) + 
-# annotate("text",x=2005,y=20000,label=str_c("slope==", coef(lm(trend_df$area~trend_df$year))[2] |> round(0),"ha"),parse=TRUE)
-
-# stat_poly_eq(mapping = aes(x = year, y = area, fill = NULL, label = paste(..rr.label..)),
-#              data = trend_df) +
-# stat_fit_glance(method = 'lm', data = trend_df,
-#                 method.args = list(formula = formula),
-#                 geom = 'text',
-#                 mapping = aes(x = year, y = area, fill = NULL,
-#                               label = paste("P-value = ", signif(..p.value.., digits = 4), sep = "")),
-#                 label.x.npc = 'right', label.y.npc = 0.35, size = 3)
-
-ggsave(filename = str_c("./output/forest_loss_area_time_series_",str_to_lower(country),".png"), plot = gp, bg = "#ffffff",
-       width = 160, height = 120, units = "mm", scale = 1)
-
+ggsave(filename = str_c("./output/barplot_top_six.png"), plot = gp, bg = "#ffffff",
+       width = 345, height = 180, units = "mm", scale = 1)
 
 # ------------------------------------------------------------------------------
 # Table: Country tree cover extent
