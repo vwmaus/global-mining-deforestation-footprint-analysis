@@ -1,3 +1,6 @@
+# Plot global map of accumulated tree cover loss on a 50x50 grid cells 
+# 
+
 library(stringr)
 library(dplyr)
 library(sf)

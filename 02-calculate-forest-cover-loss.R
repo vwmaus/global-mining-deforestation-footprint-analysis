@@ -1,3 +1,9 @@
+# BEFORE RUNNING THIS SCRIPT
+#   1. UPLOAD global_mining_and_quarry_20220203.gpkg to Google Earth Engine GEE platform
+#   2. Run the script 01-gee-calculate-tree-cover-loss.js on GEE platform 
+#   3. Download all files from Google drive folder "GEE" to the "./data/gee_platform_forest_loss_<version>"
+#   4. The script below will tidy the tree cover loss time series coming from GEE
+
 library(sf)
 library(dplyr)
 library(tidyr)

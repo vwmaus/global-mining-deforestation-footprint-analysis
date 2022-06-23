@@ -1,3 +1,19 @@
+# Plot global map of accumulated tree cover loss on a 50x50 grid cells 
+#
+
+library(stringr)
+library(dplyr)
+library(sf)
+library(progress)
+library(tibble)
+library(readr)
+library(tidyr)
+library(ggplot2)
+library(scales)
+library(foreach)
+library(viridis)
+library(ggpubr)
+
 library(stringr)
 library(dplyr)
 library(readr)
@@ -88,12 +104,14 @@ font_family <- "sans"
 th <- ggplot2::theme(axis.text = ggplot2::element_text(size = font_size, family = font_family), 
                      text = ggplot2::element_text(size = font_size, family = font_family)) 
 
+# --------------------------------------------------------------------------------------
+# plot global tree cover loss 50x50 grid cells -----------------------------------------
+
 W_gp <- plot_goode_homolosine_world_map(ocean_color = "#e5f1f8", land_color = "gray95", family = font_family,
                                         grid_color = "grey60", grid_size = 0.1,
                                         country_borders_color = "grey60", country_borders_size = 0.1) +
   ggplot2::geom_sf(data = grid_50_forest_loss, mapping = aes(fill = fl * 100), color = NA, lwd = 0, size = 0) +
   ggplot2::coord_sf(crs = "+proj=igh", expand = FALSE) +
-  # viridis::scale_fill_viridis(option = "viridis", begin = 0, end = 1, direction = -1, discrete = FALSE) +
   viridis::scale_fill_viridis(option = "turbo", begin = 0, end = 1, direction = 1, 
                               discrete = FALSE, 
                               trans = log10_trans(),

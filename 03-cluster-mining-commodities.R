@@ -1,3 +1,6 @@
+# This script links the forest loss to commodities using a hcluster algorithm 
+# The information about the commodities is in the file "mining_commodities.gpkg"
+
 library(stringr)
 library(dplyr)
 library(sf)
