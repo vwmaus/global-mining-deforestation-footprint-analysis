@@ -1,11 +1,13 @@
+# --------------------------------------------------------------------------------------
+# This script merges OSM and global mining polygons from Maus et al. (2022)
+# Input datasets are: 1) polygons from Maus et al. (2022) https://doi.org/10.1594/PANGAEA.942325 and polygon features landuse=quarry from the OSM database
+# The resulting dataset is published in Zenodo https://doi.org/10.5281/zenodo.7307210
+
 library(s2)
 library(sf)
 library(dplyr)
 source("R/s2_union_split_agg.R")
 source("R/clean_polygons.R")
-
-# TODO: add datasets to Zenodo
-# TODO: add script to download from Zenodo
 
 # --------------------------------------------------------------------------------------
 # get world map from Eurostat  ---------------------------------------------------------
@@ -20,7 +22,7 @@ if(!file.exists("./data/countries_polygon.gpkg")){
     sf::st_write(dsn = "./data/countries_polygon.gpkg", delete_dsn = TRUE)
 }
 
-world_map <- sf::st_read(dsn = "./data/countries_polygon.gpkg") 
+world_map <- sf::st_read(dsn = "./data/countries_polygon.gpkg")
 
 # --------------------------------------------------------------------------------------
 # Import mining datsets 

@@ -1,8 +1,10 @@
 # BEFORE RUNNING THIS SCRIPT
 #   1. UPLOAD global_mining_and_quarry_20220203.gpkg to Google Earth Engine GEE platform
 #   2. Run the script 01-gee-calculate-tree-cover-loss.js on GEE platform 
-#   3. Download all files from Google drive folder "GEE" to the "./data/gee_platform_forest_loss_<version>"
+#   3. Download all files from Google drive folder "GEE" to the "./data/mining-tree-cover-loss-<version>"
 #   4. The script below will tidy the tree cover loss time series coming from GEE
+# 
+# The datasets generated in this script are published in Zenodo https://doi.org/10.5281/zenodo.7299103
 
 library(sf)
 library(dplyr)
@@ -11,11 +13,15 @@ library(stringr)
 library(units)
 library(progress)
 library(units)
+library(readr)
+
+# Replace to process a different version
+gee_version <- "20220630"
 
 # ------------------------------------------------------------------------------
 # get forest loss files 
 forest_loss_path <- 
-  dir("./data/gee_platform_forest_loss_2022020", 
+  dir(str_c("./data/mining-tree-cover-loss-",gee_version), 
       pattern = "tree_cover_loss_mines_", full.names = TRUE)
 
 # ------------------------------------------------------------------------------
@@ -26,7 +32,7 @@ for(f in forest_loss_path){
   print(str_c("Processing ", f))
   
   tree_cover <- str_remove_all(basename(f), "tree_cover_loss_mines_") %>%
-    str_remove_all(str_c("_", data_version, ".csv"))
+    str_remove_all(str_c("_", gee_version, ".csv"))
   
   mines_gee <- read_csv(f, show_col_types = FALSE) |> 
     select(id, forest_loss = groups) |> 
@@ -55,12 +61,13 @@ dplyr::summarise_all(select(out, -id, -year), sum, na.rm = TRUE) |>
 
 # ------------------------------------------------------------------------------
 # add attributes
-mines_gee <- st_read("./data/gee_platform_forest_loss_2022020/mining_features_20220203.geojson", quiet = TRUE)
+mines_gee <- dir(str_c("./data/mining-tree-cover-loss-",gee_version), pattern = ".geojson", full.names = TRUE) |> 
+  st_read(quiet = TRUE)
 
 mines_gee |> 
   st_drop_geometry() |>
   as_tibble() |>
   select(id, isoa3, country, ecoregion, biome) |> 
   right_join(out) |>
-  readr::write_csv("./data/global_mining_and_quarry_forest_loss.csv")
+  readr::write_csv(str_c("./output/global_mining_and_quarry_forest_loss_",gee_version,".csv"))
 

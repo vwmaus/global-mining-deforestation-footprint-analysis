@@ -2,14 +2,13 @@
 var gfc = ee.Image("UMD/hansen/global_forest_change_2020_v1_8"),
     ecoregions = ee.FeatureCollection("RESOLVE/ECOREGIONS/2017"),
     wcmc_areas = ee.FeatureCollection("WCMC/WDPA/current/polygons"),
-    region = ee.FeatureCollection("users/maus/mining_and_quarry/global_mining_and_quarry_20220203");
+    region2 = ee.FeatureCollection("users/maus/mining_and_quarry/global_mining_and_quarry_20220203"),
+    region1 = ee.FeatureCollection("users/maus/mining_and_quarry/global_mining_polygons_v2");
 /***** End of imports. If edited, may not auto-convert in the playground. *****/
-// TO MIGRATE TO R see https://github.com/r-spatial/rgee
-//var mines = region2.select(['system:index', 'FID', 'ISO3_CO', 'COUNTRY', 'AREA'],['gid', 'id', 'country_isoa3', 'country_name', 'area'])//.limit(2)
-var mines = region.select(['system:index', 'id', 'isoa3', 'country', 'area'],['gid', 'id', 'isoa3', 'country', 'mine_area'])//.limit(10)
-//var mines = region.filter(ee.Filter.inList('id', ['0000001', '0000002', '0000003']));
-//print(mines)
-var v = '20220203'
+var mines = region1.select(['system:index', 'FID', 'ISO3_CO', 'COUNTRY', 'AREA'],['gid', 'id', 'isoa3', 'country', 'mine_area'])//.limit(10)
+//var mines = region2.select(['system:index', 'id', 'isoa3', 'country', 'area'],['gid', 'id', 'isoa3', 'country', 'mine_area'])//.limit(10)
+//print(mines.limit(1))
+var v = '20221109'
 
 // export function
 function export_table (table, description) { 
