@@ -2,7 +2,7 @@
 #   1. UPLOAD global_mining_and_quarry_20220203.gpkg to Google Earth Engine GEE platform
 #   2. Run the script 01-gee-calculate-tree-cover-loss.js on GEE platform 
 #   3. Download all files from Google drive folder "GEE" to the "./data/mining-tree-cover-loss-<version>"
-#   4. The script below will tidy the tree cover loss time series coming from GEE
+#   4. The script below will tidy the tree cover loss time series coming from GEE and add commodities
 # 
 # The datasets generated in this script are published in Zenodo https://doi.org/10.5281/zenodo.7299103
 
@@ -66,10 +66,20 @@ mines_gee <- dir(str_c("./data/mining-tree-cover-loss-",gee_version), pattern = 
   st_read(quiet = TRUE) |> 
   dplyr::mutate(id = str_pad(id, 7, "0", side = 'left')) # correct ids when not char
 
-mines_gee |> 
+mines_gee <- mines_gee |> 
   st_drop_geometry() |>
   as_tibble() |>
   select(id, isoa3, country, ecoregion, biome) |> 
-  right_join(out) |>
-  readr::write_csv(str_c("./output/global_mining_and_quarry_forest_loss_",gee_version,".csv"))
+  right_join(out)
 
+# ------------------------------------------------------------------------------
+# add commodities
+if(file.exists(str_c("./data/hcluster_concordance_",gee_version,".csv"))){
+  mines_gee <- read_csv(str_c("./data/hcluster_concordance_",gee_version,".csv")) |> 
+    select(id, id_hcluster, area_mine = area, list_of_commodities) |> 
+    mutate(id = str_remove_all(id, 'A')) |> 
+    left_join(mines_gee)
+} else {
+  print("WARNING: Commodities cluster is missing. Results will be saved without commodities.")
+}
+readr::write_csv(mines_gee, str_c("./output/global_mining_and_quarry_forest_loss_",gee_version,".csv"))

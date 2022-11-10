@@ -115,15 +115,5 @@ hcluster_concordance |>
   summarise(area = sum(area)) |> 
   mutate(perc = area / sum(area))
 
-hcluster_concordance <- hcluster_concordance |> 
-  mutate(type_of_commodities = ifelse(is.na(list_of_commodities), "Unknown", 
-                                      ifelse(str_detect(list_of_commodities, "Coal"), 
-                                             ifelse(str_detect(list_of_commodities, ","), "Coal+Metals", "Coal"), "Metals"))) 
-
-write_csv(hcluster_concordance, str_c("./output/hcluster_concordance_",data_version,".csv"))
-
-hcluster_concordance |> 
-  group_by(type_of_commodities) |> 
-  summarise(area = sum(area)) |> 
-  mutate(perc = area / sum(area))
+write_csv(hcluster_concordance, str_c("./data/hcluster_concordance_",data_version,".csv"))
 
