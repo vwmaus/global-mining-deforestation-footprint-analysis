@@ -6,6 +6,8 @@
 library(s2)
 library(sf)
 library(dplyr)
+library(rgeos)
+library(smoothr)
 source("R/s2_union_split_agg.R")
 source("R/clean_polygons.R")
 
@@ -83,7 +85,7 @@ global_quarry <- global_quarry %>%
   dplyr::mutate(area = sf::st_area(geometry) %>% units::set_units("km^2")) |> 
   select(id, isoa3 = ISO3_CODE, country = COUNTRY_NAME, area)
 
-st_write(global_quarry, "./data/global_mining_and_quarry_20220203.gpkg", delete_dsn = TRUE)
+st_write(global_quarry, "./output/global_mining_and_quarry_20220203.gpkg", delete_dsn = TRUE)
 
 global_quarry |> 
   st_drop_geometry() |> 

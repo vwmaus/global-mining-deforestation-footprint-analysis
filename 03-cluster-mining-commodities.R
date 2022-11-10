@@ -1,5 +1,5 @@
-# This script links the forest loss to commodities using a hcluster algorithm 
-# The information about the commodities is in the file "mining_commodities.gpkg"
+# This script links forest loss to commodities using a hcluster algorithm 
+# The information about the commodities is in the file "mining_commodities.gpkg". This file is not open because of copyright restrictions of the S&P database
 
 library(stringr)
 library(dplyr)
@@ -16,7 +16,7 @@ library(doParallel)
 # ------------------------------------------------------------------------------
 # set input data version 
 data_version <- "20220203"
-path_mining_area <- str_c("./data/global_mining_and_quarry_",data_version,".gpkg") 
+path_mining_area <- str_c("./output/global_mining_and_quarry_",data_version,".gpkg")
 path_mining_commodities <- "./data/snl/mining_commodities.gpkg"
 path_clusting_dataset <- str_c("./data/snl/clustering_dataset_", data_version, ".gpkg")
 

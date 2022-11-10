@@ -16,7 +16,7 @@ library(units)
 library(readr)
 
 # Replace to process a different version
-gee_version <- "20220630"
+gee_version <- "20220203"
 
 # ------------------------------------------------------------------------------
 # get forest loss files 
@@ -46,7 +46,8 @@ for(f in forest_loss_path){
            area = as.numeric(str_extract(forest_loss, pattern = "(?<=sum\\=).+(?=$)")),
            area = set_units(set_units(area, m^2), km^2)) |> 
     dplyr::arrange(id, year) |> 
-    dplyr::select(id, year, area)|> 
+    dplyr::select(id, year, area) |> 
+    dplyr::mutate(id = str_pad(id, 7, "0", side = 'left')) |> # correct ids when not char
     dplyr::rename(!!paste0("area_forest_loss_", tree_cover) := area)
   
   out <- dplyr::full_join(out, mines_gee, by = c("id" = "id", "year" = "year"))
@@ -62,7 +63,8 @@ dplyr::summarise_all(select(out, -id, -year), sum, na.rm = TRUE) |>
 # ------------------------------------------------------------------------------
 # add attributes
 mines_gee <- dir(str_c("./data/mining-tree-cover-loss-",gee_version), pattern = ".geojson", full.names = TRUE) |> 
-  st_read(quiet = TRUE)
+  st_read(quiet = TRUE) |> 
+  dplyr::mutate(id = str_pad(id, 7, "0", side = 'left')) # correct ids when not char
 
 mines_gee |> 
   st_drop_geometry() |>
