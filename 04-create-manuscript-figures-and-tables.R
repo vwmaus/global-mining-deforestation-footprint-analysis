@@ -301,7 +301,7 @@ tmp_table <- str_c(na.omit(forest_loss$list_of_commodities), collapse = ",") |>
 
 xtable::print.xtable(tmp_table, table.placement = "!htpb", include.rownames = FALSE, caption.placement = "top", booktabs = TRUE, hline.after = c(0, nrow(tmp_table)-1, nrow(tmp_table)),
                      add.to.row = list(pos = list(-1), command = c("\\hline\n&&\\multicolumn{4}{c}{Forest loss within each initial tree cover share}&\\\\ \n\\cmidrule(lr){3-6}\n")),
-                     size="\\fontsize{10pt}{11pt}\\selectfont", file = "./output/tab-s3-area-commodity.tex")
+                     size="\\fontsize{10pt}{11pt}\\selectfont", tabular.environment = "longtable", file = "./output/tab-s3-area-commodity.tex")
 
 
 # protection level tree cover loss
