@@ -26,10 +26,13 @@ source("R/00_plot_goode_homolosine_world_map.R")
 # ------------------------------------------------------------------------------
 # set input data version 
 data_version <- "20220203"
-path_mining_area <- str_c("./data/global_mining_and_quarry_",data_version,".gpkg") 
-path_mining_cluster <- str_c("./data/hcluster_concordance_",data_version,".csv")
-path_forest_loss <- "./data/global_mining_and_quarry_forest_loss.csv"
-path_to_mining_polygons <- "./data/global_mining_and_quarry_20220203.gpkg"
+
+
+# ------------------------------------------------------------------------------
+# path to dataset
+path_mining_cluster <- str_c("./output/hcluster_concordance_",data_version,".csv")
+path_forest_loss <- str_c("./output/global_mining_and_quarry_forest_loss_",data_version,".csv")
+path_to_mining_polygons <- str_c("./output/global_mining_and_quarry_",data_version,".gpkg")
 
 # --------------------------------------------------------------------------------------
 # define ggplot theme ------------------------------------------------------------------
@@ -39,7 +42,7 @@ font_size <- 14 # font size in pt
 pt_to_mm <- 2.835
 font_family <- "sans"
 th <- ggplot2::theme(axis.text = ggplot2::element_text(size = font_size, family = font_family), 
-                     text = ggplot2::element_text(size = font_size, family = font_family)) 
+                     text = ggplot2::element_text(size = font_size, family = font_family))
 
 make_grid_50x50 <- function(data){
   
@@ -143,14 +146,14 @@ mining_cluster <- mining_cluster <- read_csv(path_mining_cluster) |>
 
 # commodity table 
 tmp_table <- left_join(forest_loss, mining_cluster) |> 
-  select(`Commodity cluster` = type_of_commodities,
+  select(`Commodity group` = type_of_commodities,
          `Mining area` = area_mine, 
          `<25%` = area_forest_loss_025,
          `26-50%` = area_forest_loss_050, 
          `51-75%` = area_forest_loss_075,
          `76-100%` = area_forest_loss_100, 
          `Total loss` = area_forest_loss_000) |> 
-  group_by(`Commodity cluster`) |> 
+  group_by(`Commodity group`) |> 
   summarise(across(everything(), ~sum(.x, na.rm = TRUE)*100)) |> # to ha
   arrange(desc(`Total loss`)) |> 
   adorn_totals("row") |> 
@@ -158,7 +161,7 @@ tmp_table <- left_join(forest_loss, mining_cluster) |>
 
 xtable::print.xtable(tmp_table, include.rownames = FALSE, caption.placement = "top", booktabs = TRUE, hline.after = c(0, nrow(tmp_table)-1, nrow(tmp_table)),
                      add.to.row = list(pos = list(-1), command = c("\\hline\n&&\\multicolumn{4}{c}{Forest loss within each initial tree cover share}&\\\\ \n\\cmidrule(lr){3-6}\n")),
-                     size="\\fontsize{10pt}{11pt}\\selectfont")
+                     size="\\fontsize{10pt}{11pt}\\selectfont", file = "./output/tab-s1-area-commodity-group.tex")
 
 # biome table 
 tmp_table <- left_join(forest_loss, mining_cluster) |> 
@@ -177,10 +180,10 @@ tmp_table <- left_join(forest_loss, mining_cluster) |>
 
 xtable::print.xtable(tmp_table, include.rownames = FALSE, caption.placement = "top", booktabs = TRUE, hline.after = c(0, nrow(tmp_table)-1, nrow(tmp_table)),
                      add.to.row = list(pos = list(-1), command = c("\\hline\n&&\\multicolumn{4}{c}{Forest loss within each initial tree cover share}&\\\\ \n\\cmidrule(lr){3-6}\n")),
-                     size="\\fontsize{10pt}{11pt}\\selectfont")
+                     size="\\fontsize{10pt}{11pt}\\selectfont", file = "./output/tab-s2-area-biome.tex")
 
 
-# biome table 
+# country table 
 tmp_table <- left_join(forest_loss, mining_cluster) |> 
   select(`Country` = country,
          `Mining area` = area_mine, 
@@ -197,11 +200,10 @@ tmp_table <- left_join(forest_loss, mining_cluster) |>
 
 xtable::print.xtable(tmp_table, include.rownames = FALSE, caption.placement = "top", booktabs = TRUE, hline.after = c(0, nrow(tmp_table)-1, nrow(tmp_table)),
                      add.to.row = list(pos = list(-1), command = c("\\hline\n&&\\multicolumn{4}{c}{Forest loss within each initial tree cover share}&\\\\ \n\\cmidrule(lr){3-6}\n")),
-                     size="\\fontsize{10pt}{11pt}\\selectfont", tabular.environment = "longtable")
+                     size="\\fontsize{10pt}{11pt}\\selectfont", tabular.environment = "longtable", file = "./output/tab-s1-area-country.tex")
 
 # --------------------------------------------------------------------------------------
 # fig-3 plot selected countries bar plot -----------------------------------------------
-
 
 fract_forest_cover <- tibble::tibble(
   `Initial tree cover (%)` = factor(c("(0, 25]", "(25, 50]", "(50, 75]", "(75, 100]"), 
@@ -249,7 +251,7 @@ gp <- forest_loss_ts |>
   scale_fill_grey(start = .7, end = 0, guide = guide_legend(direction = "horizontal", title.position = "top")) +
   scale_y_continuous(labels = label_number(scale = 1e-3, accuracy = 1)) + 
   scale_x_continuous(labels = seq(2000, 2015, 5), breaks = seq(2000, 2015, 5)) + 
-  ylab("Area (K ha)") 
+  ylab("Area (K ha)")
 
-ggsave(filename = str_c("./output/barplot_top_six.png"), plot = gp, bg = "#ffffff",
+ggsave(filename = str_c("./output/fig-2-barplot-top-six-countries.png"), plot = gp, bg = "#ffffff",
        width = 345, height = 180, units = "mm", scale = 1)

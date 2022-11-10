@@ -120,7 +120,7 @@ hcluster_concordance <- hcluster_concordance |>
                                       ifelse(str_detect(list_of_commodities, "Coal"), 
                                              ifelse(str_detect(list_of_commodities, ","), "Coal+Metals", "Coal"), "Metals"))) 
 
-write_csv(hcluster_concordance, str_c("./data/hcluster_concordance_",data_version,".csv"))
+write_csv(hcluster_concordance, str_c("./output/hcluster_concordance_",data_version,".csv"))
 
 hcluster_concordance |> 
   group_by(type_of_commodities) |> 
