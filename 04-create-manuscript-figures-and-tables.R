@@ -34,7 +34,7 @@ path_forest_loss <- str_c("./output/global_mining_and_quarry_forest_loss_",data_
 path_to_mining_polygons <- str_c("./output/global_mining_and_quarry_",data_version,".gpkg")
 
 mine_features <- st_read(path_to_mining_polygons) |> 
-  select(id)
+  select(id, area_mine = area)
 
 forest_loss <- read_csv(path_forest_loss) |> 
   filter(!is.na(year)) |> 
@@ -99,8 +99,8 @@ grid_50_forest_loss <- make_grid_50x50(mine_features_areas)
 sum(grid_50_forest_loss$fl)
 
 W_gp <- plot_goode_homolosine_world_map(ocean_color = "#e5f1f8", land_color = "gray95", family = font_family,
-                                        grid_color = "grey60", grid_size = 0.1,
-                                        country_borders_color = "grey60", country_borders_size = 0.1) +
+                                        grid_color = "grey75", grid_size = 0.1,
+                                        country_borders_color = "grey75", country_borders_size = 0.1) +
   ggplot2::geom_sf(data = grid_50_forest_loss, mapping = aes(fill = fl * 100), color = NA, lwd = 0, size = 0) + # * 100 from km2 to ha
   ggplot2::coord_sf(crs = "+proj=igh", expand = FALSE) +
   viridis::scale_fill_viridis(option = "turbo", begin = 0, end = 1, direction = 1, 
@@ -193,7 +193,6 @@ gp <- str_c(na.omit(forest_loss$list_of_commodities), collapse = ",") |>
     forest_loss |> 
       filter(str_detect(list_of_commodities, i)) |> 
       transmute(Comodity = i,
-                `Mining area` = area_mine, 
                 `(0, 25]` = area_forest_loss_025,
                 `(25, 50]` = area_forest_loss_050, 
                 `(50, 75]` = area_forest_loss_075,
@@ -205,13 +204,11 @@ gp <- str_c(na.omit(forest_loss$list_of_commodities), collapse = ",") |>
   bind_rows() |> 
   arrange(desc(`Total loss`)) |> 
   filter(`Total loss` >= 10000) |> # remove smaller than 10,000ha
-  select(-`Mining area`, -`Total loss`) |> 
+  select(-`Total loss`) |> 
   mutate(Comodity = factor(Comodity, Comodity, Comodity)) |> 
   pivot_longer(cols = c(-Comodity), names_to = "Initial tree cover (%)", values_to = "Area") |> 
   ggplot(aes(x = Comodity, y = Area, fill = `Initial tree cover (%)`)) + 
-  geom_bar(stat="identity", width = 0.5) 
-
-gp <- gp +
+  geom_bar(stat="identity", width = 0.5) +
   theme_linedraw() + 
   theme(axis.text.x = element_text(angle = 45, hjust = 1),
         panel.grid.major.x = element_blank(),
@@ -225,8 +222,8 @@ gp <- gp +
         legend.box.spacing = unit(0.0, "cm"),
         legend.key.size = unit(0.3, "cm")) + 
   scale_fill_grey(start = .7, end = 0, guide = guide_legend(direction = "horizontal", title.position = "top")) +
-  scale_y_continuous(labels = label_number(scale = 1e-3, accuracy = 1)) + 
-  ylab("Area (K ha)") + 
+  scale_y_continuous(labels = label_number(scale = 1e-6, accuracy = 0.1)) + 
+  ylab("Area (M ha)") + 
   xlab("")
 
 ggsave(filename = str_c("./output/fig-3-barplot-commodities.png"), plot = gp, bg = "#ffffff",
@@ -238,13 +235,18 @@ ggsave(filename = str_c("./output/fig-3-barplot-commodities.png"), plot = gp, bg
 # supplementary tables -----------------------------------------------------------------
 
 # biome table 
-tmp_table <- select(forest_loss, `Biome` = biome,
-                    `Mining area` = area_mine, 
+tmp_table <- select(forest_loss, id, `Biome` = biome,
                     `<25%` = area_forest_loss_025,
                     `26-50%` = area_forest_loss_050, 
                     `51-75%` = area_forest_loss_075,
                     `76-100%` = area_forest_loss_100, 
                     `Total loss` = area_forest_loss_000) |> 
+  group_by(id, `Biome`) |> 
+  summarise(across(everything(), ~sum(.x, na.rm = TRUE))) |> # to ha
+  full_join(st_drop_geometry(mine_features)) |> 
+  rename("Mining area" = area_mine) |> 
+  ungroup() |> 
+  select(-id) |> 
   group_by(`Biome`) |> 
   summarise(across(everything(), ~sum(.x, na.rm = TRUE)*100)) |> # to ha
   arrange(desc(`Total loss`)) |> 
@@ -257,13 +259,18 @@ xtable::print.xtable(tmp_table, table.placement = "!htpb", include.rownames = FA
 
 
 # country table 
-tmp_table <- select(forest_loss, `Country` = country,
-                    `Mining area` = area_mine, 
+tmp_table <- select(forest_loss, id, `Country` = country,
                     `<25%` = area_forest_loss_025,
                     `26-50%` = area_forest_loss_050, 
                     `51-75%` = area_forest_loss_075,
                     `76-100%` = area_forest_loss_100, 
                     `Total loss` = area_forest_loss_000) |> 
+  group_by(id, `Country`) |> 
+  summarise(across(everything(), ~sum(.x, na.rm = TRUE))) |> 
+  full_join(st_drop_geometry(mine_features)) |> 
+  rename("Mining area" = area_mine) |> 
+  ungroup() |> 
+  select(-id) |> 
   group_by(`Country`) |> 
   summarise(across(everything(), ~sum(.x, na.rm = TRUE)*100)) |> # to ha
   arrange(desc(`Total loss`)) |> 
@@ -285,7 +292,6 @@ tmp_table <- str_c(na.omit(forest_loss$list_of_commodities), collapse = ",") |>
     forest_loss |> 
       filter(str_detect(list_of_commodities, i)) |> 
       transmute(Comodity = i,
-                `Mining area` = area_mine, 
                 `<25%` = area_forest_loss_025,
                 `26-50%` = area_forest_loss_050, 
                 `51-75%` = area_forest_loss_075,
@@ -300,7 +306,7 @@ tmp_table <- str_c(na.omit(forest_loss$list_of_commodities), collapse = ",") |>
   xtable(digits = 0, caption = "Mining area and forest loss area from 2000 to 2019 per commodity in hectares.", label = "tab:s3-commodities") 
 
 xtable::print.xtable(tmp_table, table.placement = "!htpb", include.rownames = FALSE, caption.placement = "top", booktabs = TRUE, hline.after = c(0, nrow(tmp_table)-1, nrow(tmp_table)),
-                     add.to.row = list(pos = list(-1), command = c("\\hline\n&&\\multicolumn{4}{c}{Forest loss within each initial tree cover share}&\\\\ \n\\cmidrule(lr){3-6}\n")),
+                     add.to.row = list(pos = list(-1), command = c("\\hline\n&&\\multicolumn{4}{c}{Forest loss within each initial tree cover share}&\\\\ \n\\cmidrule(lr){2-7}\n")),
                      size="\\fontsize{10pt}{11pt}\\selectfont", tabular.environment = "longtable", file = "./output/tab-s3-area-commodity.tex")
 
 

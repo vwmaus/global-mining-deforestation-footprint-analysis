@@ -76,7 +76,7 @@ mines_gee <- mines_gee |>
 # add commodities
 if(file.exists(str_c("./data/hcluster_concordance_",gee_version,".csv"))){
   mines_gee <- read_csv(str_c("./data/hcluster_concordance_",gee_version,".csv")) |> 
-    select(id, id_hcluster, area_mine = area, list_of_commodities) |> 
+    select(id, id_hcluster, list_of_commodities) |> 
     mutate(id = str_remove_all(id, 'A')) |> 
     left_join(mines_gee)
 } else {
