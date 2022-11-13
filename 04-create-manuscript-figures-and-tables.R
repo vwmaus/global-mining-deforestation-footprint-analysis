@@ -34,7 +34,7 @@ path_forest_loss <- str_c("./output/global_mining_and_quarry_forest_loss_",data_
 path_to_mining_polygons <- str_c("./output/global_mining_and_quarry_",data_version,".gpkg")
 
 mine_features <- st_read(path_to_mining_polygons) |> 
-  select(id, area_mine = area)
+  rename(area_mine = area)
 
 forest_loss <- read_csv(path_forest_loss) |> 
   filter(!is.na(year)) |> 
@@ -243,7 +243,7 @@ tmp_table <- select(forest_loss, id, `Biome` = biome,
                     `Total loss` = area_forest_loss_000) |> 
   group_by(id, `Biome`) |> 
   summarise(across(everything(), ~sum(.x, na.rm = TRUE))) |> # to ha
-  full_join(st_drop_geometry(mine_features)) |> 
+  full_join(st_drop_geometry(select(mine_features, id, area_mine))) |> 
   rename("Mining area" = area_mine) |> 
   ungroup() |> 
   select(-id) |> 
@@ -267,7 +267,7 @@ tmp_table <- select(forest_loss, id, `Country` = country,
                     `Total loss` = area_forest_loss_000) |> 
   group_by(id, `Country`) |> 
   summarise(across(everything(), ~sum(.x, na.rm = TRUE))) |> 
-  full_join(st_drop_geometry(mine_features)) |> 
+  full_join(st_drop_geometry(select(mine_features, id, area_mine))) |> 
   rename("Mining area" = area_mine) |> 
   ungroup() |> 
   select(-id) |> 
@@ -347,7 +347,7 @@ xtable::print.xtable(tmp_table, table.placement = "!htpb", include.rownames = FA
 # figs1 - plot global tree cover loss 50x50 grid cells ---------------------------------
 path_forest_loss <- "./output/global_mining_and_quarry_forest_loss_20221109.csv"
 path_to_mining_polygons <- "./data/mining-tree-cover-loss-20221109/mining_features_20221109.geojson"
-  
+
 mine_features <- st_read(path_to_mining_polygons) |> 
   transmute(id = str_pad(id, 7, "0", side = 'left')) |> 
   rename(geom = geometry)
