@@ -72,6 +72,11 @@ mines_gee <- mines_gee |>
   select(id, isoa3, country, ecoregion, biome) |> 
   right_join(out)
 
+# fixes unicode error
+mines_gee <- mines_gee |> 
+  mutate(country = ifelse(str_detect(country, "Cura(.+)ao"), "Curaçao", country),
+         country = ifelse(str_detect(country, "C(.+)te D\\?Ivoire"), "Côte d'Ivoire", country))
+
 # ------------------------------------------------------------------------------
 # add commodities
 if(file.exists(str_c("./data/hcluster_concordance_",gee_version,".csv"))){
