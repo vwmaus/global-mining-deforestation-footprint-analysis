@@ -5,57 +5,60 @@ var gfc = ee.Image("UMD/hansen/global_forest_change_2020_v1_8"),
     region2 = ee.FeatureCollection("users/maus/mining_and_quarry/global_mining_and_quarry_20220203"),
     region1 = ee.FeatureCollection("users/maus/mining_and_quarry/global_mining_polygons_v2");
 /***** End of imports. If edited, may not auto-convert in the playground. *****/
-var mines = region1.select(['system:index', 'FID', 'ISO3_CO', 'COUNTRY', 'AREA'],['gid', 'id', 'isoa3', 'country', 'mine_area'])//.limit(10)
-//var mines = region2.select(['system:index', 'id', 'isoa3', 'country', 'area'],['gid', 'id', 'isoa3', 'country', 'mine_area'])//.limit(10)
+//var mines = region1.select(['system:index', 'FID', 'ISO3_CO', 'COUNTRY', 'AREA'],['gid', 'id', 'isoa3', 'country', 'mine_area'])//.limit(10)
+var mines = region2.select(['system:index', 'id', 'isoa3', 'country', 'area'],['gid', 'id', 'isoa3', 'country', 'mine_area'])//.limit(10)
 //print(mines.limit(1))
-var v = '20221109'
+//print(mines.size())
+var v = '20221119a'
 
 // export function
 function export_table (table, description) { 
   Export.table.toDrive({
     collection: ee.FeatureCollection(table),
     description: description,
-    folder: 'GEE',
+    folder: 'GEE/mining-tree-cover-loss-' + v,
     fileFormat: 'CSV',
     selectors: ['gid', 'id', 'isoa3', 'country', 'ecoregion_id', 'ecoregion', 'biome_id', 'biome', 'mine_area', 'groups']
   });
 }
 
-// Define a spatial filter as geometries that intersect.
-var spatialFilter = ee.Filter.intersects({
+// Define a spatial filter of geometries that intersect
+var spatial_intersects = ee.Filter.intersects({
   leftField: '.geo',
   rightField: '.geo',
   maxError: 10
 });
 
-// Define a saveAll join.
+// Define a saveAll join
 var distSaveAll = ee.Join.saveAll({
-  matchesKey: 'ecoregion'
+  matchesKey: 'ecoregion',
+  measureKey: 'key',
+  outer: true
 });
 
 // Add ecoregions as a property of mines
-var eco_mines = distSaveAll.apply(mines, ecoregions, spatialFilter)
+var eco_mines = distSaveAll.apply(mines, ecoregions, spatial_intersects)
   .map(function(feat) {
+    
     var eco = ee.Feature(ee.List(feat.get('ecoregion')).get(0));
-    var ECO_ID = eco.get('ECO_ID');
-    var ECO_NAME = eco.get('ECO_NAME');
-    var BIOME_NAME = eco.get('BIOME_NAME');
-    var BIOME_NUM = eco.get('BIOME_NUM');
-    var properties = feat.propertyNames();
-    var selectProperties = properties.filter(ee.Filter.neq('item', 'ecoregion'));
 
-    return feat.select(selectProperties).set(
-      'ecoregion_id', ECO_ID,
-      'ecoregion', ECO_NAME,
-      'biome_id', BIOME_NUM,
-      'biome', BIOME_NAME
-    );
+    return ee.Feature(feat.geometry(), {
+      'gid': feat.get('gid'),
+      'id': feat.get('id'),
+      'isoa3': feat.get('isoa3'),
+      'country': feat.get('country'),
+      'mine_area': feat.get('mine_area'),
+      'ecoregion_id': ee.Algorithms.If(feat.get('ecoregion'), eco.get('ECO_ID'), null),
+      'ecoregion': ee.Algorithms.If(feat.get('ecoregion'), eco.get('ECO_NAME'), null),
+      'biome_id': ee.Algorithms.If(feat.get('ecoregion'), eco.get('BIOME_NUM'), null),
+      'biome': ee.Algorithms.If(feat.get('ecoregion'), eco.get('BIOME_NAME'), null)
+  });
 });
 
 Export.table.toDrive({
     collection: eco_mines,
     description: 'mining_features_' + v,
-    folder: 'GEE',
+    folder: 'GEE/mining-tree-cover-loss-' + v,
     fileFormat: 'GeoJSON'
   });
   
