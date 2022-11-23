@@ -62,6 +62,7 @@ dplyr::summarise_all(select(out, -id, -year), sum, na.rm = TRUE) |>
 
 # ------------------------------------------------------------------------------
 # add attributes
+##### THE GEOJSON FROM GEE IS LOSING SOME IDS ------ ~129 DATA POINTS
 mines_gee <- dir(str_c("./data/mining-tree-cover-loss-",gee_version), pattern = ".geojson", full.names = TRUE) |> 
   st_read(quiet = TRUE) |> 
   dplyr::mutate(id = str_pad(id, 7, "0", side = 'left')) # correct ids when not char
