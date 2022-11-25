@@ -232,10 +232,10 @@ ggsave(filename = str_c("./output/fig-3-barplot-commodities.png"), plot = gp, bg
 
 # biome table 
 tmp_table <- select(forest_loss, id, `Biome` = biome,
-                    `<25%` = area_forest_loss_025,
-                    `26-50%` = area_forest_loss_050, 
-                    `51-75%` = area_forest_loss_075,
-                    `76-100%` = area_forest_loss_100, 
+                    `(0, 25]%` = area_forest_loss_025,
+                    `(25, 50]%` = area_forest_loss_050, 
+                    `(50, 75]%` = area_forest_loss_075,
+                    `(75, 100]%` = area_forest_loss_100, 
                     `Total loss` = area_forest_loss_000) |> 
   group_by(id, `Biome`) |> 
   summarise(across(everything(), ~sum(.x, na.rm = TRUE))) |> # to ha
@@ -256,10 +256,10 @@ xtable::print.xtable(tmp_table, table.placement = "!htpb", include.rownames = FA
 
 # country table 
 tmp_table <- select(forest_loss, id, `Country` = country,
-                    `<25%` = area_forest_loss_025,
-                    `26-50%` = area_forest_loss_050, 
-                    `51-75%` = area_forest_loss_075,
-                    `76-100%` = area_forest_loss_100, 
+                    `(0, 25]%` = area_forest_loss_025,
+                    `(25, 50]%` = area_forest_loss_050, 
+                    `(50, 75]%` = area_forest_loss_075,
+                    `(75, 100]%` = area_forest_loss_100, 
                     `Total loss` = area_forest_loss_000) |> 
   group_by(id, `Country`) |> 
   summarise(across(everything(), ~sum(.x, na.rm = TRUE))) |> 
@@ -288,10 +288,10 @@ tmp_table <- str_c(na.omit(forest_loss$list_of_commodities), collapse = ",") |>
     forest_loss |> 
       filter(str_detect(list_of_commodities, i)) |> 
       transmute(Comodity = i,
-                `<25%` = area_forest_loss_025,
-                `26-50%` = area_forest_loss_050, 
-                `51-75%` = area_forest_loss_075,
-                `76-100%` = area_forest_loss_100, 
+                `(0, 25]%` = area_forest_loss_025,
+                `(25, 50]%` = area_forest_loss_050, 
+                `(50, 75]%` = area_forest_loss_075,
+                `(75, 100]%` = area_forest_loss_100, 
                 `Total loss` = area_forest_loss_000) |> 
       group_by(Comodity) |> 
       summarise(across(everything(), ~sum(.x, na.rm = TRUE)*100))
