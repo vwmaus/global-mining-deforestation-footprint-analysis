@@ -17,8 +17,9 @@ library(doParallel)
 # set input data version 
 data_version <- "20220203"
 path_mining_area <- str_c("./output/global_mining_and_quarry_",data_version,".gpkg")
-path_mining_commodities <- "./data/snl/mining_commodities.gpkg"
 path_clusting_dataset <- str_c("./data/snl/clustering_dataset_", data_version, ".gpkg")
+# The dataset below was extracted from the SNL database which requires license
+path_mining_commodities <- "./data/snl/mining_commodities.gpkg"
 
 # ------------------------------------------------------------------------------
 # set cluster 
@@ -30,7 +31,6 @@ registerDoParallel(cl)
 create_clusting_dataset <- function(){
   st_read(path_mining_area, quiet = TRUE) |> 
     mutate(id = str_c("A", id)) |> 
-    # The dataset below was extracted from the SNL database which requires license
     bind_rows(st_read(path_mining_commodities, quiet = TRUE) |> 
                 mutate(id = str_c("C", str_pad(id, width = 7, pad = 0)))) |> 
     st_write(path_clusting_dataset, layer = "mining_features", delete_dsn = TRUE, quiet = TRUE)
@@ -70,12 +70,12 @@ h <- units::set_units(10000, m)
 dist_files <- dir(str_c("./data/dist_matrix_", data_version), full.names = TRUE)
 names(dist_files) <- stringr::str_remove_all(basename(dist_files), ".rds")
 mine_clusters <- foreach(
-  f = isoa3_list$isoa3, 
+    f = names(dist_files), 
   .combine = 'bind_rows'
 ) %dopar% {
   
   id_hcluster <- 1
-  
+
   out <- 
     st_read(dsn = path_clusting_dataset, 
             query = str_c("SELECT id, isoa3, country, area, list_of_commodities FROM mining_features WHERE isoa3 = \"", f, "\""), 
@@ -91,11 +91,11 @@ mine_clusters <- foreach(
   
   out$id_hcluster <- id_hcluster
   
-  out
+  out 
   
 }
 
-write_csv(mine_clusters, file = "./data/hcluster_results.csv")
+write_csv(mine_clusters, file = str_c("./data/hcluster_results_", data_version, ".csv"))
 
 # create cluster ids concordance
 source("./R/fun_collapse_groups.R")

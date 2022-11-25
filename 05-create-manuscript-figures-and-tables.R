@@ -24,19 +24,15 @@ library(janitor)
 source("R/00_plot_goode_homolosine_world_map.R")
 
 # ------------------------------------------------------------------------------
-# set input data version 
-data_version <- "20220203"
-
-
-# ------------------------------------------------------------------------------
 # join datasets
-path_forest_loss <- str_c("./output/global_mining_and_quarry_forest_loss_",data_version,".csv")
-path_to_mining_polygons <- str_c("./output/global_mining_and_quarry_",data_version,".gpkg")
+path_forest_loss_all <- "./output/global_mining_and_quarry_forest_loss_20221123a.csv"
+path_forest_loss_v2 <- "./output/global_mining_and_quarry_forest_loss_20221123b.csv"
+path_to_mining_polygons <- "./output/global_mining_and_quarry_20220203.gpkg"
 
 mine_features <- st_read(path_to_mining_polygons) |> 
   rename(area_mine = area)
 
-forest_loss <- read_csv(path_forest_loss) |> 
+forest_loss <- read_csv(path_forest_loss_all) |> 
   filter(!is.na(year)) |> 
   filter(year > 2000, year < 2020) |> 
   mutate(list_of_commodities = str_replace_all(list_of_commodities, "Alumina", "Aluminum"),
@@ -344,23 +340,32 @@ xtable::print.xtable(tmp_table, table.placement = "!htpb", include.rownames = FA
 
 # --------------------------------------------------------------------------------------
 # figs1 - plot global tree cover loss 50x50 grid cells ---------------------------------
-path_forest_loss <- "./output/global_mining_and_quarry_forest_loss_20221109.csv"
-path_to_mining_polygons <- "./data/mining-tree-cover-loss-20221109/mining_features_20221109.geojson"
-
 mine_features <- st_read(path_to_mining_polygons) |> 
-  transmute(id = str_pad(id, 7, "0", side = 'left')) |> 
-  rename(geom = geometry)
+  rename(area_mine = area)
 
-forest_loss <- read_csv(path_forest_loss) |> 
+forest_loss <- read_csv(path_forest_loss_v2) |> 
   filter(!is.na(year)) |> 
-  filter(year > 2000, year < 2020) 
+  filter(year > 2000, year < 2020) |> 
+  mutate(list_of_commodities = str_replace_all(list_of_commodities, "Alumina", "Aluminum"),
+         list_of_commodities = str_replace_all(list_of_commodities, "Bauxite", "Aluminum"),
+         list_of_commodities = str_replace_all(list_of_commodities, "Zinc-Lead", "Zinc"),
+         list_of_commodities = str_replace_all(list_of_commodities, "Heavy Rare Earths and Yttrium", "Unknown REE"),
+         list_of_commodities = str_replace_all(list_of_commodities, "Rare Earth Elements", "Unknown REE"))
 
 forest_loss_accum <- forest_loss  |> 
-  group_by(id, isoa3, country, ecoregion, biome) |> 
+  group_by(id, list_of_commodities, isoa3, country, ecoregion, biome) |> 
   summarise(across(matches('area_forest_loss'), sum)) 
 
 mine_features_areas <- mine_features |> 
   left_join(forest_loss_accum)
+
+# data check 
+mine_features_areas |> 
+  st_drop_geometry() |> 
+  mutate(Unknown = is.na(list_of_commodities)) |> 
+  group_by(Unknown) |> 
+  summarise(area = sum(area_forest_loss_000, na.rm = TRUE)) |> 
+  mutate(perc = area / sum(area))
 
 grid_50_forest_loss <- make_grid_50x50(mine_features_areas)
 
@@ -393,5 +398,3 @@ W_gp <- plot_goode_homolosine_world_map(ocean_color = "#e5f1f8", land_color = "g
 ggplot2::ggsave(plot = W_gp, bg = "#ffffff",
                 filename = "output/fig-s1-global-map.png",
                 width = textwidth, height = 170, units = "mm", scale = 1)
-
-
