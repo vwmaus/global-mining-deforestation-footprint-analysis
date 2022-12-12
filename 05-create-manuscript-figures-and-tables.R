@@ -48,12 +48,54 @@ forest_loss_accum <- forest_loss  |>
 mine_features_areas <- mine_features |> 
   left_join(forest_loss_accum)
 
-# data check 
+# data check forest loss allocation
+# commodity
 mine_features_areas |> 
   st_drop_geometry() |> 
   mutate(Unknown = is.na(list_of_commodities)) |> 
   group_by(Unknown) |> 
   summarise(area = sum(area_forest_loss_000, na.rm = TRUE)) |> 
+  mutate(perc = area / sum(area))
+
+# biome
+mine_features_areas |> 
+  st_drop_geometry() |> 
+  mutate(Unknown = is.na(biome)) |> 
+  group_by(Unknown) |> 
+  summarise(area = sum(area_forest_loss_000, na.rm = TRUE)) |> 
+  mutate(perc = area / sum(area))
+
+# country
+mine_features_areas |> 
+  st_drop_geometry() |> 
+  mutate(Unknown = is.na(country)) |> 
+  group_by(Unknown) |> 
+  summarise(area = sum(area_forest_loss_000, na.rm = TRUE)) |> 
+  mutate(perc = area / sum(area))
+
+# data check mining area allocation
+# commodity
+mine_features_areas |> 
+  st_drop_geometry() |> 
+  mutate(Unknown = is.na(list_of_commodities)) |> 
+  group_by(Unknown) |> 
+  summarise(area = sum(area_mine, na.rm = TRUE)) |> 
+  mutate(perc = area / sum(area))
+
+# biome
+mine_features_areas |> 
+  st_drop_geometry() |> 
+  mutate(Unknown = is.na(biome)) |> 
+  group_by(Unknown) |> 
+  summarise(area = sum(area_mine, na.rm = TRUE)) |> 
+  mutate(perc = area / sum(area))
+
+# country
+mine_features_areas |> 
+  st_drop_geometry() |> 
+  mutate(Unknown = is.na(country)) |> 
+  group_by(Unknown) |> 
+  summarise(area = sum(area_mine, na.rm = TRUE)) |> 
   mutate(perc = area / sum(area))
 
 # --------------------------------------------------------------------------------------
@@ -87,8 +129,30 @@ make_grid_50x50 <- function(data){
   
 }
 
+make_grid_50x50_25 <- function(data){
+  
+  mine_features_points <- data |> 
+    transmute(fl = ifelse(is.na(area_forest_loss_000), 0, area_forest_loss_000) -
+                   ifelse(is.na(area_forest_loss_025), 0, area_forest_loss_025)) |> 
+    mutate(geom = st_centroid(geom))
+  
+  mine_features_points_goode <- 
+    st_transform(mine_features_points, crs = "+proj=igh +ellps=WGS84 +units=m +no_defs")
+  
+  grid_50 <- st_make_grid(mine_features_points_goode, cellsize = 50000) |> 
+    st_as_sf() |> 
+    st_filter(mine_features_points_goode)
+  
+  grid_50_forest_loss <- mine_features_points_goode |> 
+    aggregate(grid_50, sum, na.rm = TRUE) |> 
+    filter(fl > 0)
+  
+  return(grid_50_forest_loss)
+  
+}
+
 # --------------------------------------------------------------------------------------
-# fig1 - plot global tree cover loss 50x50 grid cells ----------------------------------
+# fig1 - plot global tree cover loss 50x50 grid cells (0-100]---------------------------
 grid_50_forest_loss <- make_grid_50x50(mine_features_areas)
 
 # check total forest loss
@@ -121,6 +185,40 @@ ggplot2::ggsave(plot = W_gp, bg = "#ffffff",
                 filename = "output/fig-1-global-map.png",
                 width = textwidth, height = 170, units = "mm", scale = 1)
 
+
+# --------------------------------------------------------------------------------------
+# figs2 - plot global tree cover loss 50x50 grid cells [25-100]-------------------------
+grid_50_forest_loss <- make_grid_50x50_25(mine_features_areas)
+
+# check total forest loss
+sum(grid_50_forest_loss$fl)
+
+W_gp <- plot_goode_homolosine_world_map(ocean_color = "#e5f1f8", land_color = "gray95", family = font_family,
+                                        grid_color = "grey75", grid_size = 0.1,
+                                        country_borders_color = "grey75", country_borders_size = 0.1) +
+  ggplot2::geom_sf(data = grid_50_forest_loss, mapping = aes(fill = fl * 100), color = NA, lwd = 0, size = 0) + # * 100 from km2 to ha
+  ggplot2::coord_sf(crs = "+proj=igh", expand = FALSE) +
+  viridis::scale_fill_viridis(option = "turbo", begin = 0, end = 1, direction = 1, 
+                              discrete = FALSE, 
+                              trans = log10_trans(),
+                              breaks = c(0.01, 2.5, 400, 60000),
+                              labels = function(x) sprintf("%g", x)
+  ) +
+  theme(
+    legend.position = "bottom",
+    legend.direction = "horizontal",
+    legend.justification = "center",
+    legend.box.spacing = unit(0.0, "cm"),
+    legend.key.size = unit(0.3, "cm"),
+    legend.key.width = unit(textheight/15, "mm"),
+    plot.margin = margin(t = -1, r = -1, b = 0, l = -1, unit = "cm")
+  ) +
+  labs(fill = bquote(Area~(ha))) + 
+  th
+
+ggplot2::ggsave(plot = W_gp, bg = "#ffffff",
+                filename = "output/fig-s2-global-map.png",
+                width = textwidth, height = 170, units = "mm", scale = 1)
 
 # --------------------------------------------------------------------------------------
 # fig-2 plot selected countries bar plot -----------------------------------------------
@@ -246,11 +344,12 @@ tmp_table <- select(forest_loss, id, `Biome` = biome,
   group_by(`Biome`) |> 
   summarise(across(everything(), ~sum(.x, na.rm = TRUE)*100)) |> # to ha
   arrange(desc(`Total loss`)) |> 
+  mutate(Biome = ifelse(is.na(Biome),"Unassigned (Mining polygon does not intersect any biome)",Biome)) |> 
   adorn_totals("row") |> 
   xtable(digits = 0, caption = "Mining area and forest loss area from 2000 to 2019 per biome in hectares.", label = "tab:s1-biome") 
 
 xtable::print.xtable(tmp_table, table.placement = "!htpb", include.rownames = FALSE, caption.placement = "top", booktabs = TRUE, hline.after = c(0, nrow(tmp_table)-1, nrow(tmp_table)),
-                     add.to.row = list(pos = list(-1), command = c("\\hline\n&&\\multicolumn{4}{c}{Forest loss within each initial tree cover share}&\\\\ \n\\cmidrule(lr){3-6}\n")),
+                     add.to.row = list(pos = list(-1), command = c("\\hline\n&\\multicolumn{4}{c}{Forest loss within each initial tree cover share}&&\\\\ \n\\cmidrule(lr){2-5}\n")),
                      size="\\fontsize{10pt}{11pt}\\selectfont", file = "./output/tab-s1-area-biome.tex")
 
 
@@ -263,7 +362,7 @@ tmp_table <- select(forest_loss, id, `Country` = country,
                     `Total loss` = area_forest_loss_000) |> 
   group_by(id, `Country`) |> 
   summarise(across(everything(), ~sum(.x, na.rm = TRUE))) |> 
-  full_join(st_drop_geometry(select(mine_features, id, area_mine))) |> 
+  right_join(st_drop_geometry(select(mine_features, id, Country = country, area_mine))) |> 
   rename("Mining area" = area_mine) |> 
   ungroup() |> 
   select(-id) |> 
@@ -274,7 +373,7 @@ tmp_table <- select(forest_loss, id, `Country` = country,
   xtable(digits = 0, caption = "Mining area and forest loss area from 2000 to 2019 per country in hectares.", label = "tab:s2-country") 
 
 xtable::print.xtable(tmp_table, table.placement = "!htpb", include.rownames = FALSE, caption.placement = "top", booktabs = TRUE, hline.after = c(0, nrow(tmp_table)-1, nrow(tmp_table)),
-                     add.to.row = list(pos = list(-1), command = c("\\hline\n&&\\multicolumn{4}{c}{Forest loss within each initial tree cover share}&\\\\ \n\\cmidrule(lr){3-6}\n")),
+                     add.to.row = list(pos = list(-1), command = c("\\hline\n&\\multicolumn{4}{c}{Forest loss within each initial tree cover share}&&\\\\ \n\\cmidrule(lr){2-5}\n")),
                      size="\\fontsize{10pt}{11pt}\\selectfont", tabular.environment = "longtable", file = "./output/tab-s2-area-country.tex")
 
 
@@ -298,10 +397,10 @@ tmp_table <- str_c(na.omit(forest_loss$list_of_commodities), collapse = ",") |>
   }) |> 
   bind_rows() |> 
   arrange(desc(`Total loss`)) |> 
-  adorn_totals("row") |> 
+  # adorn_totals("row") |> 
   xtable(digits = 0, caption = "Mining area and forest loss area from 2000 to 2019 per commodity in hectares.", label = "tab:s3-commodities") 
 
-xtable::print.xtable(tmp_table, table.placement = "!htpb", include.rownames = FALSE, caption.placement = "top", booktabs = TRUE, hline.after = c(0, nrow(tmp_table)-1, nrow(tmp_table)),
+xtable::print.xtable(tmp_table, table.placement = "!htpb", include.rownames = FALSE, caption.placement = "top", booktabs = TRUE, hline.after = c(0, nrow(tmp_table)),
                      add.to.row = list(pos = list(-1), command = c("\\hline\n&\\multicolumn{4}{c}{Forest loss within each initial tree cover share}&\\\\ \n\\cmidrule(lr){2-5}\n")),
                      size="\\fontsize{10pt}{11pt}\\selectfont", tabular.environment = "longtable", file = "./output/tab-s3-area-commodity.tex")
 
@@ -397,4 +496,38 @@ W_gp <- plot_goode_homolosine_world_map(ocean_color = "#e5f1f8", land_color = "g
 
 ggplot2::ggsave(plot = W_gp, bg = "#ffffff",
                 filename = "output/fig-s1-global-map.png",
+                width = textwidth, height = 170, units = "mm", scale = 1)
+
+# --------------------------------------------------------------------------------------
+# figs3 - plot global tree cover loss 50x50 grid cells [25-100]-------------------------
+grid_50_forest_loss <- make_grid_50x50_25(mine_features_areas)
+
+# check total forest loss
+sum(grid_50_forest_loss$fl)
+
+W_gp <- plot_goode_homolosine_world_map(ocean_color = "#e5f1f8", land_color = "gray95", family = font_family,
+                                        grid_color = "grey60", grid_size = 0.1,
+                                        country_borders_color = "grey60", country_borders_size = 0.1) +
+  ggplot2::geom_sf(data = grid_50_forest_loss, mapping = aes(fill = fl * 100), color = NA, lwd = 0, size = 0) + # * 100 from km2 to ha
+  ggplot2::coord_sf(crs = "+proj=igh", expand = FALSE) +
+  viridis::scale_fill_viridis(option = "turbo", begin = 0, end = 1, direction = 1, 
+                              discrete = FALSE, 
+                              trans = log10_trans(),
+                              breaks = c(0.01, 2.5, 400, 60000),
+                              labels = function(x) sprintf("%g", x)
+  ) +
+  theme(
+    legend.position = "bottom",
+    legend.direction = "horizontal",
+    legend.justification = "center",
+    legend.box.spacing = unit(0.0, "cm"),
+    legend.key.size = unit(0.3, "cm"),
+    legend.key.width = unit(textheight/15, "mm"),
+    plot.margin = margin(t = -1, r = -1, b = 0, l = -1, unit = "cm")
+  ) +
+  labs(fill = bquote(Area~(ha))) + 
+  th
+
+ggplot2::ggsave(plot = W_gp, bg = "#ffffff",
+                filename = "output/fig-s3-global-map.png",
                 width = textwidth, height = 170, units = "mm", scale = 1)
