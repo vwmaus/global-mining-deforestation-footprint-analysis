@@ -595,7 +595,7 @@ gp <- left_join(all, wu) |>
   xlab("Area (M ha)")
 
 ggsave(filename = str_c("./output/fig-s4-spatial-distribution.png"), plot = gp, bg = "#ffffff",
-       width = 345, height = 100, units = "mm", scale = 1)
+       width = 345, height = 140, units = "mm", scale = 1)
 
   
   
