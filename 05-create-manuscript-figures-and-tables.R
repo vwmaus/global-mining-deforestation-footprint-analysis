@@ -20,6 +20,7 @@ library(rworldmap)
 library(cowplot)
 library(xtable)
 library(janitor)
+library(forcats)
 
 source("R/00_plot_goode_homolosine_world_map.R")
 
@@ -286,22 +287,22 @@ gp <- str_c(na.omit(forest_loss$list_of_commodities), collapse = ",") |>
   lapply(function(i){
     forest_loss |> 
       filter(str_detect(list_of_commodities, i)) |> 
-      transmute(Comodity = i,
+        transmute(Commodity = i,
                 `(0, 25]` = area_forest_loss_025,
                 `(25, 50]` = area_forest_loss_050, 
                 `(50, 75]` = area_forest_loss_075,
                 `(75, 100]` = area_forest_loss_100, 
                 `Total loss` = area_forest_loss_000) |> 
-      group_by(Comodity) |> 
+      group_by(Commodity) |> 
       summarise(across(everything(), ~sum(.x, na.rm = TRUE)*100))
   }) |> 
   bind_rows() |> 
   arrange(desc(`Total loss`)) |> 
   filter(`Total loss` >= 10000) |> # remove smaller than 10,000ha
   select(-`Total loss`) |> 
-  mutate(Comodity = factor(Comodity, Comodity, Comodity)) |> 
-  pivot_longer(cols = c(-Comodity), names_to = "Initial tree cover (%)", values_to = "Area") |> 
-  ggplot(aes(x = Comodity, y = Area, fill = `Initial tree cover (%)`)) + 
+  mutate(Commodity = factor(Commodity, Commodity, Commodity)) |> 
+  pivot_longer(cols = c(-Commodity), names_to = "Initial tree cover (%)", values_to = "Area") |> 
+  ggplot(aes(x = Commodity, y = Area, fill = `Initial tree cover (%)`)) + 
   geom_bar(stat="identity", width = 0.5) +
   theme_linedraw() + 
   theme(axis.text.x = element_text(angle = 45, hjust = 1),
@@ -386,13 +387,13 @@ tmp_table <- str_c(na.omit(forest_loss$list_of_commodities), collapse = ",") |>
   lapply(function(i){
     forest_loss |> 
       filter(str_detect(list_of_commodities, i)) |> 
-      transmute(Comodity = i,
+      transmute(Commodity = i,
                 `(0, 25]%` = area_forest_loss_025,
                 `(25, 50]%` = area_forest_loss_050, 
                 `(50, 75]%` = area_forest_loss_075,
                 `(75, 100]%` = area_forest_loss_100, 
                 `Total loss` = area_forest_loss_000) |> 
-      group_by(Comodity) |> 
+      group_by(Commodity) |> 
       summarise(across(everything(), ~sum(.x, na.rm = TRUE)*100))
   }) |> 
   bind_rows() |> 
@@ -531,3 +532,71 @@ W_gp <- plot_goode_homolosine_world_map(ocean_color = "#e5f1f8", land_color = "g
 ggplot2::ggsave(plot = W_gp, bg = "#ffffff",
                 filename = "output/fig-s3-global-map.png",
                 width = textwidth, height = 170, units = "mm", scale = 1)
+
+
+# --------------------------------------------------------------------------------------
+# figs4 - distribution of mining area across latitudes 
+agg_level <- 20
+osm <- st_read("./data/osm_quarry_check_20211125.gpkg") |> 
+  st_set_crs(4326) |> 
+  transmute(Area = st_area(geom) |> units::set_units("ha") |> units::drop_units(), Latitude = st_coordinates(st_centroid(geom))[,2]) |>  
+  st_drop_geometry() |> 
+  as_tibble() |> 
+  mutate(Latitude = cut(Latitude, breaks = seq(-60, 90, agg_level))) |> 
+  group_by(Latitude) |> 
+  summarise(osm = sum(Area, na.rm = TRUE)) 
+
+wu <- st_read("./data/wu_quarry_check_20211125.gpkg") |> 
+  st_set_crs(4326) |> 
+  st_make_valid() |> 
+  transmute(Area = st_area(geom) |> units::set_units("ha") |> units::drop_units(), Latitude = st_coordinates(st_centroid(geom))[,2]) |> 
+  st_drop_geometry() |> 
+  as_tibble() |> 
+  mutate(Latitude = cut(Latitude, breaks = seq(-60, 90, agg_level))) |> 
+  group_by(Latitude) |> 
+  summarise(wu = sum(Area, na.rm = TRUE))
+
+all <- st_read("./output/global_mining_and_quarry_20220203.gpkg") |> 
+  st_set_crs(4326) |> 
+  transmute(Area = st_area(geom) |> units::set_units("ha") |> units::drop_units(), Latitude = st_coordinates(st_centroid(geom))[,2]) |> 
+  st_drop_geometry() |> 
+  as_tibble() |> 
+  mutate(Latitude = cut(Latitude, breaks = seq(-60, 90, agg_level))) |> 
+  group_by(Latitude) |> 
+  summarise(total = sum(Area, na.rm = TRUE))
+
+# join datasets and calculate shares
+gp <- left_join(all, wu) |> 
+  left_join(osm) |> 
+  mutate(overlap = (osm + wu) - total,
+         osm = osm - overlap,
+         wu = wu - overlap,
+         check = osm + wu + overlap) |> 
+  drop_na() |> 
+  select(Latitude, `Maus et al. (2022)` = wu, OpenStreetMap = osm, Overlap = overlap) |> 
+  pivot_longer(-Latitude, values_to = "Area", names_to = "Data source") |> 
+  mutate(`Data source` = factor(as.character(`Data source`), levels = c("Maus et al. (2022)", "Overlap", "OpenStreetMap"))) |> 
+  ggplot(aes(x = Area, y = Latitude, fill = `Data source`)) + 
+  geom_bar(stat="identity", width = 0.8) + 
+  theme_linedraw() + 
+  theme(axis.text = ggplot2::element_text(size = font_size), 
+        text = ggplot2::element_text(size = font_size),
+        legend.text = element_text(size = font_size),
+        legend.title = element_text(size = font_size),
+        legend.position = "bottom",
+        legend.direction = "horizontal",
+        legend.justification = "center",
+        legend.box.spacing = unit(0.0, "cm"),
+        legend.key.size = unit(0.3, "cm")) + 
+  #scale_fill_grey(start = .7, end = 0, guide = guide_legend(direction = "horizontal", title.position = "top")) +
+  scale_fill_viridis(discrete = TRUE, option = "D", direction = -1) +
+  scale_x_continuous(labels = label_number(scale = 1e-6, accuracy = 0.1)) +
+  #scale_x_continuous(labels = seq(2000, 2015, 5), breaks = seq(2000, 2015, 5)) 
+  xlab("Area (M ha)")
+
+ggsave(filename = str_c("./output/fig-s4-spatial-distribution.png"), plot = gp, bg = "#ffffff",
+       width = 345, height = 100, units = "mm", scale = 1)
+
+  
+  
+  
