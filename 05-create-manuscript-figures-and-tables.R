@@ -2,6 +2,7 @@
 
 library(stringr)
 library(dplyr)
+library(broom)
 library(sf)
 library(progress)
 library(tibble)
@@ -251,12 +252,24 @@ forest_loss_ts <- forest_loss |>
 
 trend_bar <- forest_loss_ts |> 
   select(country, year, area_forest_loss_000) |> 
+  mutate(area_forest_loss_000 = area_forest_loss_000) |> 
   distinct()
 
-gp <- forest_loss_ts |> 
-  ggplot(aes(x = Year, y = area, fill = `Initial tree cover (%)`)) + 
+sloop_pvalue <- trend_bar %>% 
+  group_by(country) |> 
+  mutate(area_forest_loss_000 = 100 * area_forest_loss_000) |> 
+  summarise(out = list(tidy(lm(area_forest_loss_000 ~ year, data = cur_data())))) %>% 
+  unnest(out) |> 
+  filter(term == "year") |> 
+  mutate(sloop_text = str_c("Forest loss annual increment: ", round(estimate, 0), " ha ", 
+                               ifelse(p.value > 0.01, str_c("(p-value=",round(p.value, 2),")"), ifelse(p.value < 0.001, "(p-value<0.001)", str_c("(p-value=",round(p.value, 3),")"))))) |> 
+  mutate(year = 2008, area = 44000)
+
+gp <- ggplot() + 
   facet_wrap(~country) + 
-  geom_bar(stat="identity", width = 0.5) + 
+  geom_bar(mapping = aes(x = Year, y = area, fill = `Initial tree cover (%)`), data = forest_loss_ts, stat="identity", width = 0.5) + 
+  stat_smooth(aes(x = year, y = area_forest_loss_000*100, group = country), data = trend_bar, method = "lm", show.legend = FALSE, se = FALSE, color = "black", fill = "black", linewidth = .5) + 
+  geom_text(mapping = aes(x = year, y = area, label = sloop_text), data = sloop_pvalue, size = 3) + 
   theme_linedraw() + 
   theme(axis.text = ggplot2::element_text(size = font_size), 
         text = ggplot2::element_text(size = font_size),
@@ -270,7 +283,7 @@ gp <- forest_loss_ts |>
   scale_fill_grey(start = .7, end = 0, guide = guide_legend(direction = "horizontal", title.position = "top")) +
   scale_y_continuous(labels = label_number(scale = 1e-3, accuracy = 1)) + 
   scale_x_continuous(labels = seq(2000, 2015, 5), breaks = seq(2000, 2015, 5)) + 
-  ylab("Area (K ha)")
+  ylab("Annual forest loss (K ha)")
 
 ggsave(filename = str_c("./output/fig-2-barplot-top-six-countries.png"), plot = gp, bg = "#ffffff",
        width = 345, height = 180, units = "mm", scale = 1)
