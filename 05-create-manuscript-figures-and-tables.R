@@ -263,13 +263,13 @@ sloop_pvalue <- trend_bar %>%
   filter(term == "year") |> 
   mutate(sloop_text = str_c("Forest loss annual increment: ", round(estimate, 0), " ha ", 
                                ifelse(p.value > 0.01, str_c("(p-value=",round(p.value, 2),")"), ifelse(p.value < 0.001, "(p-value<0.001)", str_c("(p-value=",round(p.value, 3),")"))))) |> 
-  mutate(year = 2008, area = 44000)
+  mutate(year = 2010, area = 45000)
 
 gp <- ggplot() + 
   facet_wrap(~country) + 
   geom_bar(mapping = aes(x = Year, y = area, fill = `Initial tree cover (%)`), data = forest_loss_ts, stat="identity", width = 0.5) + 
   stat_smooth(aes(x = year, y = area_forest_loss_000*100, group = country), data = trend_bar, method = "lm", show.legend = FALSE, se = FALSE, color = "black", fill = "black", linewidth = .5) + 
-  geom_text(mapping = aes(x = year, y = area, label = sloop_text), data = sloop_pvalue, size = 3) + 
+  geom_text(mapping = aes(x = year, y = area, label = sloop_text), data = sloop_pvalue, size = 3.8) + 
   theme_linedraw() + 
   theme(axis.text = ggplot2::element_text(size = font_size), 
         text = ggplot2::element_text(size = font_size),
