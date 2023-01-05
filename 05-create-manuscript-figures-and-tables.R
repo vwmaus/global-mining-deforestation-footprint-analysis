@@ -359,8 +359,12 @@ tmp_table <- select(forest_loss, id, `Biome` = biome,
   summarise(across(everything(), ~sum(.x, na.rm = TRUE)*100)) |> # to ha
   arrange(desc(`Total loss`)) |> 
   mutate(Biome = ifelse(is.na(Biome),"Unassigned (Mining polygon does not intersect any biome)",Biome)) |> 
+  mutate(per_fl = round(100*`Total loss`/sum(`Total loss`),1), per_ma = round(100*`Mining area`/sum(`Mining area`),1)) |> 
   adorn_totals("row") |> 
-  xtable(digits = 0, caption = "Mining area and forest loss area from 2000 to 2019 per biome in hectares.", label = "tab:s1-biome") 
+  mutate(`Total loss` = ifelse(Biome == "Total", round(`Total loss`, 0), str_c(round(`Total loss`, 0), " (", round(per_fl,1),"%)")), 
+         `Mining area` = ifelse(Biome == "Total", round(`Mining area`, 0), str_c(round(`Mining area`,0), " (", round(per_ma,1),"%)"))) |> 
+  select(-per_fl, -per_ma) |> 
+  xtable(digits = 0, caption = "Accumulated forest cover loss from 2000 to 2019 and the total mining area per biome in hectares.", label = "tab:s1-biome")
 
 xtable::print.xtable(tmp_table, table.placement = "!htpb", include.rownames = FALSE, caption.placement = "top", booktabs = TRUE, hline.after = c(0, nrow(tmp_table)-1, nrow(tmp_table)),
                      add.to.row = list(pos = list(-1), command = c("\\hline\n&\\multicolumn{4}{c}{Forest loss within each initial tree cover share}&&\\\\ \n\\cmidrule(lr){2-5}\n")),
@@ -383,12 +387,16 @@ tmp_table <- select(forest_loss, id, `Country` = country,
   group_by(`Country`) |> 
   summarise(across(everything(), ~sum(.x, na.rm = TRUE)*100)) |> # to ha
   arrange(desc(`Total loss`)) |> 
+  mutate(per_fl = round(100*`Total loss`/sum(`Total loss`),1), per_ma = round(100*`Mining area`/sum(`Mining area`),1)) |> 
   adorn_totals("row") |> 
-  xtable(digits = 0, caption = "Mining area and forest loss area from 2000 to 2019 per country in hectares.", label = "tab:s2-country") 
+  mutate(`Total loss` = ifelse(Country == "Total", round(`Total loss`, 0), str_c(round(`Total loss`, 0), " (", round(per_fl,1),"%)")), 
+         `Mining area` = ifelse(Country == "Total", round(`Mining area`, 0), str_c(round(`Mining area`,0), " (", round(per_ma,1),"%)"))) |> 
+  select(-per_fl, -per_ma) |> 
+  xtable(digits = 0, caption = "Accumulated forest cover loss from 2000 to 2019 and the total mining area per country in hectares.", label = "tab:s2-country") 
 
 xtable::print.xtable(tmp_table, table.placement = "!htpb", include.rownames = FALSE, caption.placement = "top", booktabs = TRUE, hline.after = c(0, nrow(tmp_table)-1, nrow(tmp_table)),
                      add.to.row = list(pos = list(-1), command = c("\\hline\n&\\multicolumn{4}{c}{Forest loss within each initial tree cover share}&&\\\\ \n\\cmidrule(lr){2-5}\n")),
-                     size="\\fontsize{10pt}{11pt}\\selectfont", tabular.environment = "longtable", file = "./output/tab-s2-area-country.tex")
+                     size="\\fontsize{10pt}{11pt}\\selectfont", tabular.environment = "longtable", file = "./output/tab-s2-area-country.tex", floating = FALSE)
 
 
 # commodity associated to forest cover loss
@@ -412,7 +420,7 @@ tmp_table <- str_c(na.omit(forest_loss$list_of_commodities), collapse = ",") |>
   bind_rows() |> 
   arrange(desc(`Total loss`)) |> 
   # adorn_totals("row") |> 
-  xtable(digits = 0, caption = "Mining area and forest loss area from 2000 to 2019 per commodity in hectares.", label = "tab:s3-commodities") 
+  xtable(digits = 0, caption = "Accumulated forest cover loss from 2000 to 2019 in hectares associated to mineral commodities.", label = "tab:s3-commodities") 
 
 xtable::print.xtable(tmp_table, table.placement = "!htpb", include.rownames = FALSE, caption.placement = "top", booktabs = TRUE, hline.after = c(0, nrow(tmp_table)),
                      add.to.row = list(pos = list(-1), command = c("\\hline\n&\\multicolumn{4}{c}{Forest loss within each initial tree cover share}&\\\\ \n\\cmidrule(lr){2-5}\n")),
@@ -429,7 +437,7 @@ xtable::print.xtable(tmp_table, table.placement = "!htpb", include.rownames = FA
 # VI (PA with sustainable use of natural resources), 
 # Not applicable, Not assigned, or Not reported -- these are aggregated andcalculated by differece
 
-tmp_table <- select(forest_loss, `Country` = country,
+tmp_table <- transmute(forest_loss, `Country` = country,
                     Ia = area_forest_loss_000_Ia,
                     Ib = area_forest_loss_000_Ib,
                     II = area_forest_loss_000_II,
@@ -437,17 +445,19 @@ tmp_table <- select(forest_loss, `Country` = country,
                     IV = area_forest_loss_000_IV,
                     V = area_forest_loss_000_V,
                     VI = area_forest_loss_000_VI,
-                    `Total loss protected` = area_forest_loss_000_p,
-                    `Total loss` = area_forest_loss_000) |> 
+                    #Other = area_forest_loss_000_p - c(Ia + Ib + II + III + IV + V + VI),
+                    `All levels` = area_forest_loss_000_p,
+                    `Total loss` = area_forest_loss_000) |>
   group_by(`Country`) |> 
   summarise(across(everything(), ~sum(.x, na.rm = TRUE)*100)) |> # to ha
-  arrange(desc(`Total loss protected`)) |> 
+  arrange(desc(`All levels`)) |> 
   adorn_totals("row") |> 
-  xtable(digits = 0, caption = "Forest loss area from 2000 to 2019 per level of protection in hectares. The forest cover loss in this table incldues forest loss independently from the initial tree cover share.", label = "tab:s4-protection") 
+  mutate(`Loss all levels (%)` = as.character(round(100*`All levels` / `Total loss`, 1))) |> 
+  xtable(digits = 0, caption = "Accumulated forest cover loss from 2000 to 2019 within areas with different level of protection according to the World Database on Protected Areas (WDPA)\\cite{UNEP-WCMC2021}. The forest cover loss in this table incldues loss independently from the initial tree cover share. The coloumn All levels also includes protected areas: not applicable, not assigned, or not reported", label = "tab:s4-protection") 
 
 xtable::print.xtable(tmp_table, table.placement = "!htpb", include.rownames = FALSE, caption.placement = "top", booktabs = TRUE, hline.after = c(0, nrow(tmp_table)-1, nrow(tmp_table)),
-                     add.to.row = list(pos = list(-1), command = c("\\hline\n&&\\multicolumn{4}{c}{Forest loss within each protection level}&\\\\ \n\\cmidrule(lr){2-8}\n")),
-                     size="\\fontsize{10pt}{11pt}\\selectfont", tabular.environment = "longtable", file = "./output/tab-s4-area-protection.tex")
+                     add.to.row = list(pos = list(-1), command = c("\\hline\n&\\multicolumn{8}{c}{Forest loss within each protection level}&\\\\ \n\\cmidrule(lr){2-9}\n")),
+                     size="\\fontsize{10pt}{11pt}\\selectfont", tabular.environment = "longtable", file = "./output/tab-s4-area-protection.tex", floating = FALSE)
 
 
 
