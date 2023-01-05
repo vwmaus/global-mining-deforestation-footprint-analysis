@@ -289,6 +289,67 @@ ggsave(filename = str_c("./output/fig-2-barplot-top-six-countries.png"), plot = 
        width = 345, height = 180, units = "mm", scale = 1)
 
 
+# --------------------------------------------------------------------------------------
+# fig-s5 plot biomes bar plot ----------------------------------------------------------
+
+fract_forest_cover <- tibble::tibble(
+  `Initial tree cover (%)` = factor(c("(0, 25]", "(25, 50]", "(50, 75]", "(75, 100]"), 
+                                    levels = c("(0, 25]", "(25, 50]", "(50, 75]", "(75, 100]")),
+  name = c("area_forest_loss_025", 
+           "area_forest_loss_050", 
+           "area_forest_loss_075", 
+           "area_forest_loss_100"))
+
+forest_loss_ts <- forest_loss |> 
+  filter(!is.na(biome)) |> 
+  select(biome, year, area_forest_loss_000, area_forest_loss_025, area_forest_loss_050, 
+         area_forest_loss_075, area_forest_loss_100) |> 
+  group_by(biome, year) |> 
+  summarise(across(everything(), sum, na.rm = TRUE), .groups = 'drop') |> 
+  filter(year > 2000, year < 2020) |> 
+  pivot_longer(cols = c(-year, -area_forest_loss_000, -biome)) |> 
+  left_join(fract_forest_cover) |> 
+  mutate(Year = year, area = value * 100) # convert to ha 
+
+trend_bar <- forest_loss_ts |> 
+  select(biome, year, area_forest_loss_000) |> 
+  mutate(area_forest_loss_000 = area_forest_loss_000) |> 
+  distinct()
+
+sloop_pvalue <- trend_bar %>% 
+  group_by(biome) |> 
+  mutate(area_forest_loss_000 = 100 * area_forest_loss_000) |> 
+  summarise(out = list(tidy(lm(area_forest_loss_000 ~ year, data = cur_data()))), area = max(area_forest_loss_000, na.rm = TRUE) + sd(area_forest_loss_000, na.rm = TRUE)/3) %>% 
+  unnest(out) |> 
+  filter(term == "year") |> 
+  mutate(sloop_text = str_c("Forest loss annual increment: ", round(estimate, 0), " ha ", 
+                            ifelse(p.value > 0.01, str_c("(p-value=",round(p.value, 2),")"), ifelse(p.value < 0.001, "(p-value<0.001)", str_c("(p-value=",round(p.value, 3),")"))))) |> 
+  mutate(year = 2010)
+
+gp <- ggplot() + 
+  facet_wrap(~biome, ncol = 3, scales = "free_y") + 
+  geom_bar(mapping = aes(x = Year, y = area, fill = `Initial tree cover (%)`), data = forest_loss_ts, stat="identity", width = 0.5) + 
+  stat_smooth(aes(x = year, y = area_forest_loss_000*100, group = biome), data = trend_bar, method = "lm", show.legend = FALSE, se = FALSE, color = "black", fill = "black", linewidth = .5) + 
+  geom_text(mapping = aes(x = year, y = area, label = sloop_text), data = sloop_pvalue, size = 3.8) + 
+  theme_linedraw() + 
+  theme(axis.text = ggplot2::element_text(size = font_size), 
+        text = ggplot2::element_text(size = font_size),
+        legend.text = element_text(size = font_size),
+        legend.title = element_text(size = font_size),
+        legend.position = "bottom",
+        legend.direction = "horizontal",
+        legend.justification = "center",
+        legend.box.spacing = unit(0.0, "cm"),
+        legend.key.size = unit(0.3, "cm")) + 
+  scale_fill_grey(start = .7, end = 0, guide = guide_legend(direction = "horizontal", title.position = "top")) +
+  #scale_y_continuous(labels = label_number(scale = 1e-3, accuracy = 1)) + 
+  scale_x_continuous(labels = seq(2000, 2015, 5), breaks = seq(2000, 2015, 5)) + 
+  ylab("Annual forest loss (K ha)")
+
+ggsave(filename = str_c("./output/fig-s5-barplot-biomes.png"), plot = gp, bg = "#ffffff",
+       width = 400, height = 640, units = "mm", scale = 1)
+
+
 
 # --------------------------------------------------------------------------------------
 # fig-3 plot commodities bar plot ------------------------------------------------------
