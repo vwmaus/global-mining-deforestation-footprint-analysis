@@ -185,9 +185,44 @@ W_gp <- plot_goode_homolosine_world_map(ocean_color = "#e5f1f8", land_color = "g
   labs(fill = bquote(Area~(ha))) + 
   th
 
+# # --------------------------------------------------------------------------------------
+# # zoom to south amareic and asia+australia ---------------------------------------------
+# win_01 <- st_bbox(c(xmin = -41, ymin = -20, xmax = -73, ymax = 15), crs = 4326) |> 
+#   st_as_sfc() |> 
+#   st_transform(crs = "+proj=igh +ellps=WGS84 +units=m +no_defs") |> 
+#   st_bbox()
+#   
+# win_02 <- st_bbox(c(xmin = 90, ymin = -10, xmax = 130, ymax = 20), crs = 4326) |> 
+#   st_as_sfc() |> 
+#   st_transform(crs = "+proj=igh +ellps=WGS84 +units=m +no_defs") |> 
+#   st_bbox()
+# 
+# W_gp +
+#   coord_sf(xlim = c(win_02[1], win_02[3]), ylim = c(win_02[2],  win_02[4]), crs = "+proj=igh", expand = FALSE) + 
+#   theme(legend.position = "none", axis.title = element_blank(),
+#         plot.margin = margin(t = -1, r = 0, b = 1, l = 0, unit = "cm")) 
+# 
+# W_gp +
+#   coord_sf(xlim = c(win_01[1], win_01[3]), ylim = c(win_01[2],  win_01[4]), crs = "+proj=igh", expand = FALSE) + 
+#   theme(legend.position = "none", axis.title = element_blank(),
+#         plot.margin = margin(t = -1, r = 0, b = 1, l = 0, unit = "cm")) 
+# 
+# # --------------------------------------------------------------------------------------
+# # build multiplot object ---------------------------------------------------------------
+# multi_gp <- ggpubr::ggarrange(W_gp,
+#                               ggarrange(SA_gp, AUS_IDN_gp, ncol = 2), 
+#                               legend = "bottom", common.legend = TRUE,
+#                               nrow = 2) 
+# 
+# ggplot2::ggsave(plot = multi_gp, bg = "#ffffff",
+#                 filename = dst_file_v2,
+#                 width = textwidth, height = textheight/1.7, units = "mm", scale = 1)
+
+
 ggplot2::ggsave(plot = W_gp, bg = "#ffffff",
                 filename = "output/fig-1-global-map.png",
                 width = textwidth, height = 170, units = "mm", scale = 1)
+
 
 
 # --------------------------------------------------------------------------------------
@@ -375,7 +410,7 @@ gp <- ggplot() +
         text = ggplot2::element_text(size = font_size),
         legend.text = element_text(size = font_size),
         legend.title = element_text(size = font_size),
-        legend.position = "bottom",
+        legend.position = c(0.8,.1),
         legend.direction = "horizontal",
         legend.justification = "center",
         legend.box.spacing = unit(0.0, "cm"),
