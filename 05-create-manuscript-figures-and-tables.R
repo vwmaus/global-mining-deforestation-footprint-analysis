@@ -155,8 +155,8 @@ make_grid_50x50_25 <- function(data){
 }
 
 # --------------------------------------------------------------------------------------
-# fig1 - plot global tree cover loss 50x50 grid cells (0-100]---------------------------
-grid_50_forest_loss <- make_grid_50x50(mine_features_areas)
+# fig1 - plot global tree cover loss 50x50 grid cells (25-100]--------------------------
+grid_50_forest_loss <- make_grid_50x50_25(mine_features_areas)
 
 # check total forest loss
 sum(grid_50_forest_loss$fl)
@@ -191,59 +191,28 @@ ggplot2::ggsave(plot = W_gp, bg = "#ffffff",
 
 
 # --------------------------------------------------------------------------------------
-# figs2 - plot global tree cover loss 50x50 grid cells [25-100]-------------------------
-grid_50_forest_loss <- make_grid_50x50_25(mine_features_areas)
-
-# check total forest loss
-sum(grid_50_forest_loss$fl)
-
-W_gp <- plot_goode_homolosine_world_map(ocean_color = "#e5f1f8", land_color = "gray95", family = font_family,
-                                        grid_color = "grey75", grid_size = 0.1,
-                                        country_borders_color = "grey75", country_borders_size = 0.1) +
-  ggplot2::geom_sf(data = grid_50_forest_loss, mapping = aes(fill = fl * 100), color = NA, lwd = 0, size = 0) + # * 100 from km2 to ha
-  ggplot2::coord_sf(crs = "+proj=igh", expand = FALSE) +
-  viridis::scale_fill_viridis(option = "turbo", begin = 0, end = 1, direction = 1, 
-                              discrete = FALSE, 
-                              trans = log10_trans(),
-                              breaks = c(0.01, 2.5, 400, 60000),
-                              labels = function(x) sprintf("%g", x)
-  ) +
-  theme(
-    legend.position = "bottom",
-    legend.direction = "horizontal",
-    legend.justification = "center",
-    legend.box.spacing = unit(0.0, "cm"),
-    legend.key.size = unit(0.3, "cm"),
-    legend.key.width = unit(textheight/15, "mm"),
-    plot.margin = margin(t = -1, r = -1, b = 0, l = -1, unit = "cm")
-  ) +
-  labs(fill = bquote(Area~(ha))) + 
-  th
-
-ggplot2::ggsave(plot = W_gp, bg = "#ffffff",
-                filename = "output/fig-s2-global-map.png",
-                width = textwidth, height = 170, units = "mm", scale = 1)
-
-# --------------------------------------------------------------------------------------
 # fig-2 plot selected countries bar plot -----------------------------------------------
-
 fract_forest_cover <- tibble::tibble(
-  `Initial tree cover (%)` = factor(c("(0, 25]", "(25, 50]", "(50, 75]", "(75, 100]"), 
-                                    levels = c("(0, 25]", "(25, 50]", "(50, 75]", "(75, 100]")),
-  name = c("area_forest_loss_025", 
-           "area_forest_loss_050", 
+  `Initial tree cover (%)` = factor(c("(25, 50]", "(50, 75]", "(75, 100]"), 
+                                    levels = c("(25, 50]", "(50, 75]", "(75, 100]")),
+  name = c("area_forest_loss_050", 
            "area_forest_loss_075", 
            "area_forest_loss_100"))
 
-country_tbl <- tibble(
-  isoa3 = c("IDN", "BRA", "RUS", "CAN", "USA", "AUS"),
-  country = factor(c("Indonesia", "Brazil", "Russia", "Canada", "United States of America", "Australia"),
-                   levels = c("Indonesia", "Brazil", "Russia", "Canada", "United States of America", "Australia")))
+# get top 6
+country_tbl <- forest_loss |> 
+  group_by(isoa3, country) |> 
+  summarise(area = (sum(area_forest_loss_000, na.rm = TRUE) - sum(area_forest_loss_025, na.rm = TRUE))*100, .groups = "drop") |> 
+  mutate(perc = 100 * area / sum(area)) |> 
+  arrange(desc(area)) |> 
+  transmute(isoa3, country = str_replace(country, "Russian Federation", "Russia")) |> 
+  slice(1:6) |> 
+  mutate(country = factor(country, levels = country))
 
 forest_loss_ts <- forest_loss |> 
   filter(isoa3 %in% country_tbl$isoa3) |> 
-  select(isoa3, year, area_forest_loss_000, area_forest_loss_025, area_forest_loss_050, 
-         area_forest_loss_075, area_forest_loss_100) |> 
+  mutate(area_forest_loss_000 = ifelse(is.na(area_forest_loss_000), 0, area_forest_loss_000) - ifelse(is.na(area_forest_loss_025), 0, area_forest_loss_025)) |> 
+  select(isoa3, year, area_forest_loss_000, area_forest_loss_050, area_forest_loss_075, area_forest_loss_100) |> 
   group_by(isoa3, year) |> 
   summarise(across(everything(), sum, na.rm = TRUE), .groups = 'drop') |> 
   filter(year > 2000, year < 2020) |> 
@@ -254,7 +223,6 @@ forest_loss_ts <- forest_loss |>
 
 trend_bar <- forest_loss_ts |> 
   select(country, year, area_forest_loss_000) |> 
-  mutate(area_forest_loss_000 = area_forest_loss_000) |> 
   distinct()
 
 sloop_pvalue <- trend_bar %>% 
@@ -291,13 +259,12 @@ ggsave(filename = str_c("./output/fig-2-barplot-top-six-countries.png"), plot = 
        width = 345, height = 180, units = "mm", scale = 1)
 
 # --------------------------------------------------------------------------------------
-# fig-s6 plot brazil bar plot ----------------------------------------------------------
+# fig-s2 plot Brazil bar plot ----------------------------------------------------------
 
 fract_forest_cover <- tibble::tibble(
-  `Initial tree cover (%)` = factor(c("(0, 25]", "(25, 50]", "(50, 75]", "(75, 100]"), 
-                                    levels = c("(0, 25]", "(25, 50]", "(50, 75]", "(75, 100]")),
-  name = c("area_forest_loss_025", 
-           "area_forest_loss_050", 
+  `Initial tree cover (%)` = factor(c("(25, 50]", "(50, 75]", "(75, 100]"), 
+                                    levels = c("(25, 50]", "(50, 75]", "(75, 100]")),
+  name = c("area_forest_loss_050", 
            "area_forest_loss_075", 
            "area_forest_loss_100"))
 
@@ -308,7 +275,8 @@ country_tbl <- tibble(
 
 forest_loss_ts <- forest_loss |> 
   filter(isoa3 %in% country_tbl$isoa3) |> 
-  select(isoa3, year, area_forest_loss_000, area_forest_loss_025, area_forest_loss_050, 
+  mutate(area_forest_loss_000 = ifelse(is.na(area_forest_loss_000), 0, area_forest_loss_000) - ifelse(is.na(area_forest_loss_025), 0, area_forest_loss_025)) |> 
+  select(isoa3, year, area_forest_loss_000, area_forest_loss_050, 
          area_forest_loss_075, area_forest_loss_100) |> 
   group_by(isoa3, year) |> 
   summarise(across(everything(), sum, na.rm = TRUE), .groups = 'drop') |> 
@@ -336,7 +304,6 @@ sloop_pvalue <- trend_bar %>%
   mutate(year = c(2006, 2016), area = 25000) 
 
 gp <- ggplot() + 
-  # facet_wrap(~Period, scales = "free_x") + 
   geom_bar(mapping = aes(x = Year, y = area, fill = `Initial tree cover (%)`), 
            data = forest_loss_ts, stat="identity", width = 0.5) + 
   stat_smooth(aes(x = year, y = area_forest_loss_000*100, group = Period), 
@@ -358,25 +325,24 @@ gp <- ggplot() +
   scale_x_continuous(labels = seq(2000, 2019, 2), breaks = seq(2000, 2019, 2)) + 
   ylab("Annual forest loss (K ha)") 
 
-ggsave(filename = str_c("./output/fig-s6-barplot-brazil.png"), plot = gp, bg = "#ffffff",
+ggsave(filename = str_c("./output/fig-s2-barplot-brazil.png"), plot = gp, bg = "#ffffff",
        width = 345, height = 140, units = "mm", scale = 1)
 
 
 # --------------------------------------------------------------------------------------
-# fig-s5 plot biomes bar plot ----------------------------------------------------------
+# fig-s3 plot biomes bar plot ----------------------------------------------------------
 
 fract_forest_cover <- tibble::tibble(
-  `Initial tree cover (%)` = factor(c("(0, 25]", "(25, 50]", "(50, 75]", "(75, 100]"), 
-                                    levels = c("(0, 25]", "(25, 50]", "(50, 75]", "(75, 100]")),
-  name = c("area_forest_loss_025", 
-           "area_forest_loss_050", 
+  `Initial tree cover (%)` = factor(c("(25, 50]", "(50, 75]", "(75, 100]"), 
+                                    levels = c("(25, 50]", "(50, 75]", "(75, 100]")),
+  name = c("area_forest_loss_050", 
            "area_forest_loss_075", 
            "area_forest_loss_100"))
 
 forest_loss_ts <- forest_loss |> 
   filter(!is.na(biome)) |> 
-  select(biome, year, area_forest_loss_000, area_forest_loss_025, area_forest_loss_050, 
-         area_forest_loss_075, area_forest_loss_100) |> 
+  mutate(area_forest_loss_000 = ifelse(is.na(area_forest_loss_000), 0, area_forest_loss_000) - ifelse(is.na(area_forest_loss_025), 0, area_forest_loss_025)) |> 
+  select(biome, year, area_forest_loss_000, area_forest_loss_050, area_forest_loss_075, area_forest_loss_100) |> 
   group_by(biome, year) |> 
   summarise(across(everything(), sum, na.rm = TRUE), .groups = 'drop') |> 
   filter(year > 2000, year < 2020) |> 
@@ -419,7 +385,7 @@ gp <- ggplot() +
   scale_x_continuous(labels = seq(2000, 2015, 5), breaks = seq(2000, 2015, 5)) + 
   ylab("Annual forest loss (K ha)")
 
-ggsave(filename = str_c("./output/fig-s5-barplot-biomes.png"), plot = gp, bg = "#ffffff",
+ggsave(filename = str_c("./output/fig-s3-barplot-biomes.png"), plot = gp, bg = "#ffffff",
        width = 420, height = 500, units = "mm", scale = 1)
 
 
@@ -435,11 +401,10 @@ gp <- str_c(na.omit(forest_loss$list_of_commodities), collapse = ",") |>
     forest_loss |> 
       filter(str_detect(list_of_commodities, i)) |> 
         transmute(Commodity = i,
-                `(0, 25]` = area_forest_loss_025,
                 `(25, 50]` = area_forest_loss_050, 
                 `(50, 75]` = area_forest_loss_075,
                 `(75, 100]` = area_forest_loss_100, 
-                `Total loss` = area_forest_loss_000) |> 
+                `Total loss` = area_forest_loss_000 - area_forest_loss_025) |> 
       group_by(Commodity) |> 
       summarise(across(everything(), ~sum(.x, na.rm = TRUE)*100))
   }) |> 
@@ -465,8 +430,8 @@ gp <- str_c(na.omit(forest_loss$list_of_commodities), collapse = ",") |>
         legend.key.size = unit(0.3, "cm")) + 
   scale_fill_grey(start = .7, end = 0, guide = guide_legend(direction = "horizontal", title.position = "top")) +
   scale_y_continuous(labels = label_number(scale = 1e-6, accuracy = 0.1)) + 
-  ylab("Area (M ha)") + 
-  xlab("")
+  ylab("Forest loss (M ha)") + 
+  xlab("Associated commodity")
 
 ggsave(filename = str_c("./output/fig-3-barplot-commodities.png"), plot = gp, bg = "#ffffff",
        width = 420, height = 120, units = "mm", scale = 1)
@@ -476,42 +441,14 @@ ggsave(filename = str_c("./output/fig-3-barplot-commodities.png"), plot = gp, bg
 # --------------------------------------------------------------------------------------
 # supplementary tables -----------------------------------------------------------------
 
-# biome table 
-tmp_table <- select(forest_loss, id, `Biome` = biome,
-                    `(0, 25]%` = area_forest_loss_025,
-                    `(25, 50]%` = area_forest_loss_050, 
-                    `(50, 75]%` = area_forest_loss_075,
-                    `(75, 100]%` = area_forest_loss_100, 
-                    `Total loss` = area_forest_loss_000) |> 
-  group_by(id, `Biome`) |> 
-  summarise(across(everything(), ~sum(.x, na.rm = TRUE))) |> # to ha
-  full_join(st_drop_geometry(select(mine_features, id, area_mine))) |> 
-  rename("Mining area" = area_mine) |> 
-  ungroup() |> 
-  select(-id) |> 
-  group_by(`Biome`) |> 
-  summarise(across(everything(), ~sum(.x, na.rm = TRUE)*100)) |> # to ha
-  arrange(desc(`Total loss`)) |> 
-  mutate(Biome = ifelse(is.na(Biome),"Unassigned (Mining polygon does not intersect any biome)",Biome)) |> 
-  mutate(per_fl = round(100*`Total loss`/sum(`Total loss`),1), per_ma = round(100*`Mining area`/sum(`Mining area`),1)) |> 
-  adorn_totals("row") |> 
-  mutate(`Total loss` = ifelse(Biome == "Total", round(`Total loss`, 0), str_c(round(`Total loss`, 0), " (", round(per_fl,1),"%)")), 
-         `Mining area` = ifelse(Biome == "Total", round(`Mining area`, 0), str_c(round(`Mining area`,0), " (", round(per_ma,1),"%)"))) |> 
-  select(-per_fl, -per_ma) |> 
-  xtable(digits = 0, caption = "Accumulated forest cover loss from 2000 to 2019 and the total mining area per biome in hectares.", label = "tab:s1-biome")
-
-xtable::print.xtable(tmp_table, table.placement = "!htpb", include.rownames = FALSE, caption.placement = "top", booktabs = TRUE, hline.after = c(0, nrow(tmp_table)-1, nrow(tmp_table)),
-                     add.to.row = list(pos = list(-1), command = c("\\hline\n&\\multicolumn{4}{c}{Forest loss within each initial tree cover share}&&\\\\ \n\\cmidrule(lr){2-5}\n")),
-                     size="\\fontsize{10pt}{11pt}\\selectfont", file = "./output/tab-s1-area-biome.tex")
-
-
 # country table 
 tmp_table <- select(forest_loss, id, `Country` = country,
                     `(0, 25]%` = area_forest_loss_025,
                     `(25, 50]%` = area_forest_loss_050, 
                     `(50, 75]%` = area_forest_loss_075,
                     `(75, 100]%` = area_forest_loss_100, 
-                    `Total loss` = area_forest_loss_000) |> 
+                    `Forest cover loss` = area_forest_loss_000) |>
+  mutate(`Forest cover loss` = `Forest cover loss` - `(0, 25]%`) |> 
   group_by(id, `Country`) |> 
   summarise(across(everything(), ~sum(.x, na.rm = TRUE))) |> 
   right_join(st_drop_geometry(select(mine_features, id, Country = country, area_mine))) |> 
@@ -520,17 +457,51 @@ tmp_table <- select(forest_loss, id, `Country` = country,
   select(-id) |> 
   group_by(`Country`) |> 
   summarise(across(everything(), ~sum(.x, na.rm = TRUE)*100)) |> # to ha
-  arrange(desc(`Total loss`)) |> 
-  mutate(per_fl = round(100*`Total loss`/sum(`Total loss`),1), per_ma = round(100*`Mining area`/sum(`Mining area`),1)) |> 
+  arrange(desc(`Forest cover loss`)) |> 
+  mutate(per_fl = round(100*`Forest cover loss`/sum(`Forest cover loss`),1), per_ma = round(100*`Mining area`/sum(`Mining area`),1)) |> 
   adorn_totals("row") |> 
-  mutate(`Total loss` = ifelse(Country == "Total", round(`Total loss`, 0), str_c(round(`Total loss`, 0), " (", round(per_fl,1),"%)")), 
+  mutate(`Forest cover loss` = ifelse(Country == "Total", round(`Forest cover loss`, 0), str_c(round(`Forest cover loss`, 0), " (", round(per_fl,1),"%)")), 
          `Mining area` = ifelse(Country == "Total", round(`Mining area`, 0), str_c(round(`Mining area`,0), " (", round(per_ma,1),"%)"))) |> 
   select(-per_fl, -per_ma) |> 
-  xtable(digits = 0, caption = "Accumulated forest cover loss from 2000 to 2019 and the total mining area per country in hectares.", label = "tab:s2-country") 
+  xtable(digits = 0, 
+         caption = 
+         "Accumulated forest cover loss from 2000 to 2019 and the total mining area per country in hectares.
+         The column \\textit{Forest cover loss} includes only areas with initial tree cover higher than 25\\%.", label = "tab:s1-country") 
 
 xtable::print.xtable(tmp_table, table.placement = "!htpb", include.rownames = FALSE, caption.placement = "top", booktabs = TRUE, hline.after = c(0, nrow(tmp_table)-1, nrow(tmp_table)),
-                     add.to.row = list(pos = list(-1), command = c("\\hline\n&\\multicolumn{4}{c}{Forest loss within each initial tree cover share}&&\\\\ \n\\cmidrule(lr){2-5}\n")),
-                     size="\\fontsize{10pt}{11pt}\\selectfont", tabular.environment = "longtable", file = "./output/tab-s2-area-country.tex", floating = FALSE)
+                     add.to.row = list(pos = list(-1), command = c("\\hline\n&\\multicolumn{4}{c}{Loss within each initial tree cover share}&&\\\\ \n\\cmidrule(lr){2-5}\n")),
+                     size="\\fontsize{10pt}{11pt}\\selectfont", tabular.environment = "longtable", file = "./output/tab-s1-area-country.tex", floating = FALSE)
+
+# biome table 
+tmp_table <- select(forest_loss, id, `Biome` = biome,
+                    `(0, 25]%` = area_forest_loss_025,
+                    `(25, 50]%` = area_forest_loss_050, 
+                    `(50, 75]%` = area_forest_loss_075,
+                    `(75, 100]%` = area_forest_loss_100, 
+                    `Forest cover loss` = area_forest_loss_000) |> 
+  group_by(id, `Biome`) |> 
+  summarise(across(everything(), ~sum(.x, na.rm = TRUE))) |> # to ha
+  full_join(st_drop_geometry(select(mine_features, id, area_mine))) |> 
+  rename("Mining area" = area_mine) |> 
+  ungroup() |> 
+  select(-id) |> 
+  group_by(`Biome`) |> 
+  summarise(across(everything(), ~sum(.x, na.rm = TRUE)*100)) |> # to ha
+  arrange(desc(`Forest cover loss`)) |> 
+  mutate(Biome = ifelse(is.na(Biome),"Unassigned (Mining polygon does not intersect any biome)",Biome)) |> 
+  mutate(per_fl = round(100*`Forest cover loss`/sum(`Forest cover loss`),1), per_ma = round(100*`Mining area`/sum(`Mining area`),1)) |> 
+  adorn_totals("row") |> 
+  mutate(`Forest cover loss` = ifelse(Biome == "Total", round(`Forest cover loss`, 0), str_c(round(`Forest cover loss`, 0), " (", round(per_fl,1),"%)")), 
+         `Mining area` = ifelse(Biome == "Total", round(`Mining area`, 0), str_c(round(`Mining area`,0), " (", round(per_ma,1),"%)"))) |> 
+  select(-per_fl, -per_ma) |> 
+  xtable(digits = 0, 
+         caption = 
+           "Accumulated forest cover loss from 2000 to 2019 and the total mining area per biome in hectares.
+         The column \\textit{Forest cover loss} includes only areas with initial tree cover higher than 25\\%.", label = "tab:s2-biome")
+
+xtable::print.xtable(tmp_table, table.placement = "!htpb", include.rownames = FALSE, caption.placement = "top", booktabs = TRUE, hline.after = c(0, nrow(tmp_table)-1, nrow(tmp_table)),
+                     add.to.row = list(pos = list(-1), command = c("\\hline\n&\\multicolumn{4}{c}{Loss within each initial tree cover share}&&\\\\ \n\\cmidrule(lr){2-5}\n")),
+                     size="\\fontsize{10pt}{11pt}\\selectfont", file = "./output/tab-s2-area-biome.tex")
 
 
 # commodity associated to forest cover loss
@@ -547,17 +518,20 @@ tmp_table <- str_c(na.omit(forest_loss$list_of_commodities), collapse = ",") |>
                 `(25, 50]%` = area_forest_loss_050, 
                 `(50, 75]%` = area_forest_loss_075,
                 `(75, 100]%` = area_forest_loss_100, 
-                `Total loss` = area_forest_loss_000) |> 
+                `Forest cover loss` = area_forest_loss_000) |> 
       group_by(Commodity) |> 
       summarise(across(everything(), ~sum(.x, na.rm = TRUE)*100))
   }) |> 
   bind_rows() |> 
-  arrange(desc(`Total loss`)) |> 
+  arrange(desc(`Forest cover loss`)) |> 
   # adorn_totals("row") |> 
-  xtable(digits = 0, caption = "Accumulated forest cover loss from 2000 to 2019 in hectares associated to mineral commodities.", label = "tab:s3-commodities") 
+  xtable(digits = 0, 
+         caption = 
+         "Accumulated forest cover loss from 2000 to 2019 in hectares associated to mineral commodities. 
+         The column \\textit{Forest cover loss} includes only areas with initial tree cover higher than 25\\%.", label = "tab:s3-commodities") 
 
 xtable::print.xtable(tmp_table, table.placement = "!htpb", include.rownames = FALSE, caption.placement = "top", booktabs = TRUE, hline.after = c(0, nrow(tmp_table)),
-                     add.to.row = list(pos = list(-1), command = c("\\hline\n&\\multicolumn{4}{c}{Forest loss within each initial tree cover share}&\\\\ \n\\cmidrule(lr){2-5}\n")),
+                     add.to.row = list(pos = list(-1), command = c("\\hline\n&\\multicolumn{4}{c}{Loss within each initial tree cover share}&\\\\ \n\\cmidrule(lr){2-5}\n")),
                      size="\\fontsize{10pt}{11pt}\\selectfont", tabular.environment = "longtable", file = "./output/tab-s3-area-commodity.tex")
 
 # protection level tree cover loss
@@ -572,22 +546,27 @@ xtable::print.xtable(tmp_table, table.placement = "!htpb", include.rownames = FA
 # Not applicable, Not assigned, or Not reported -- these are aggregated andcalculated by differece
 
 tmp_table <- transmute(forest_loss, `Country` = country,
-                    Ia = area_forest_loss_000_Ia,
-                    Ib = area_forest_loss_000_Ib,
-                    II = area_forest_loss_000_II,
-                    III = area_forest_loss_000_III, 
-                    IV = area_forest_loss_000_IV,
-                    V = area_forest_loss_000_V,
-                    VI = area_forest_loss_000_VI,
-                    #Other = area_forest_loss_000_p - c(Ia + Ib + II + III + IV + V + VI),
-                    `All levels` = area_forest_loss_000_p,
-                    `Total loss` = area_forest_loss_000) |>
+                    Ia = area_forest_loss_000_Ia - area_forest_loss_025_Ia,
+                    Ib = area_forest_loss_000_Ib - area_forest_loss_025_Ib,
+                    II = area_forest_loss_000_II - area_forest_loss_025_II,
+                    III = area_forest_loss_000_III - area_forest_loss_025_III, 
+                    IV = area_forest_loss_000_IV - area_forest_loss_025_IV,
+                    V = area_forest_loss_000_V - area_forest_loss_025_V,
+                    VI = area_forest_loss_000_VI - area_forest_loss_025_VI,
+                    `All levels` = area_forest_loss_000_p - area_forest_loss_025_p,
+                    `Forest cover loss` = area_forest_loss_000 - area_forest_loss_025) |>
   group_by(`Country`) |> 
   summarise(across(everything(), ~sum(.x, na.rm = TRUE)*100)) |> # to ha
   arrange(desc(`All levels`)) |> 
   adorn_totals("row") |> 
-  mutate(`Loss all levels (%)` = as.character(round(100*`All levels` / `Total loss`, 1))) |> 
-  xtable(digits = 0, caption = "Accumulated forest cover loss from 2000 to 2019 within areas with different level of protection according to the World Database on Protected Areas (WDPA)\\cite{UNEP-WCMC2021}. The forest cover loss in this table incldues loss independently from the initial tree cover share. The coloumn All levels also includes protected areas: not applicable, not assigned, or not reported", label = "tab:s4-protection") 
+  mutate(`Loss all levels (%)` = as.character(ifelse(`Forest cover loss`==0, 0, round(100*`All levels` / `Forest cover loss`, 1)))) |> 
+  xtable(digits = 0, 
+  caption = 
+  "Accumulated forest cover loss from 2000 to 2019 within areas with different level of 
+  protection according to the World Database on Protected Areas (WDPA)\\cite{UNEP-WCMC2021}. 
+  The forest cover loss in this table incldues loss independently from the initial tree cover share. 
+  The coloumn \\textit{All levels} also includes protected areas: not applicable, not assigned, or not reported. 
+  This table includes only areas with initial tree cover share higher than 25\\%.", label = "tab:s4-protection") 
 
 xtable::print.xtable(tmp_table, table.placement = "!htpb", include.rownames = FALSE, caption.placement = "top", booktabs = TRUE, hline.after = c(0, nrow(tmp_table)-1, nrow(tmp_table)),
                      add.to.row = list(pos = list(-1), command = c("\\hline\n&\\multicolumn{8}{c}{Forest loss within each protection level}&\\\\ \n\\cmidrule(lr){2-9}\n")),
@@ -602,12 +581,7 @@ mine_features <- st_read(path_to_mining_polygons) |>
 
 forest_loss <- read_csv(path_forest_loss_v2) |> 
   filter(!is.na(year)) |> 
-  filter(year > 2000, year < 2020) |> 
-  mutate(list_of_commodities = str_replace_all(list_of_commodities, "Alumina", "Aluminum"),
-         list_of_commodities = str_replace_all(list_of_commodities, "Bauxite", "Aluminum"),
-         list_of_commodities = str_replace_all(list_of_commodities, "Zinc-Lead", "Zinc"),
-         list_of_commodities = str_replace_all(list_of_commodities, "Heavy Rare Earths and Yttrium", "Unknown REE"),
-         list_of_commodities = str_replace_all(list_of_commodities, "Rare Earth Elements", "Unknown REE"))
+  filter(year > 2000, year < 2020) 
 
 forest_loss_accum <- forest_loss  |> 
   group_by(id, list_of_commodities, isoa3, country, ecoregion, biome) |> 
@@ -621,10 +595,10 @@ mine_features_areas |>
   st_drop_geometry() |> 
   mutate(Unknown = is.na(list_of_commodities)) |> 
   group_by(Unknown) |> 
-  summarise(area = sum(area_forest_loss_000, na.rm = TRUE)) |> 
+  summarise(area = sum(area_forest_loss_000 - area_forest_loss_025, na.rm = TRUE)) |> 
   mutate(perc = area / sum(area))
 
-grid_50_forest_loss <- make_grid_50x50(mine_features_areas)
+grid_50_forest_loss <- make_grid_50x50_25(mine_features_areas)
 
 # check total forest loss
 sum(grid_50_forest_loss$fl)
@@ -655,41 +629,6 @@ W_gp <- plot_goode_homolosine_world_map(ocean_color = "#e5f1f8", land_color = "g
 ggplot2::ggsave(plot = W_gp, bg = "#ffffff",
                 filename = "output/fig-s1-global-map.png",
                 width = textwidth, height = 170, units = "mm", scale = 1)
-
-# --------------------------------------------------------------------------------------
-# figs3 - plot global tree cover loss 50x50 grid cells [25-100]-------------------------
-grid_50_forest_loss <- make_grid_50x50_25(mine_features_areas)
-
-# check total forest loss
-sum(grid_50_forest_loss$fl)
-
-W_gp <- plot_goode_homolosine_world_map(ocean_color = "#e5f1f8", land_color = "gray95", family = font_family,
-                                        grid_color = "grey60", grid_size = 0.1,
-                                        country_borders_color = "grey60", country_borders_size = 0.1) +
-  ggplot2::geom_sf(data = grid_50_forest_loss, mapping = aes(fill = fl * 100), color = NA, lwd = 0, size = 0) + # * 100 from km2 to ha
-  ggplot2::coord_sf(crs = "+proj=igh", expand = FALSE) +
-  viridis::scale_fill_viridis(option = "turbo", begin = 0, end = 1, direction = 1, 
-                              discrete = FALSE, 
-                              trans = log10_trans(),
-                              breaks = c(0.01, 2.5, 400, 60000),
-                              labels = function(x) sprintf("%g", x)
-  ) +
-  theme(
-    legend.position = "bottom",
-    legend.direction = "horizontal",
-    legend.justification = "center",
-    legend.box.spacing = unit(0.0, "cm"),
-    legend.key.size = unit(0.3, "cm"),
-    legend.key.width = unit(textheight/15, "mm"),
-    plot.margin = margin(t = -1, r = -1, b = 0, l = -1, unit = "cm")
-  ) +
-  labs(fill = bquote(Area~(ha))) + 
-  th
-
-ggplot2::ggsave(plot = W_gp, bg = "#ffffff",
-                filename = "output/fig-s3-global-map.png",
-                width = textwidth, height = 170, units = "mm", scale = 1)
-
 
 # --------------------------------------------------------------------------------------
 # figs4 - distribution of mining area across latitudes 
@@ -754,6 +693,3 @@ gp <- left_join(all, wu) |>
 ggsave(filename = str_c("./output/fig-s4-spatial-distribution.png"), plot = gp, bg = "#ffffff",
        width = 345, height = 140, units = "mm", scale = 1)
 
-  
-  
-  
