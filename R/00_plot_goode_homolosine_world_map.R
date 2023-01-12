@@ -79,8 +79,8 @@ plot_goode_homolosine_world_map <- function(ocean_color = "#56B4E950",
                  mapping = aes(label = label)) + 
     theme(
       axis.title = element_blank(),
-      panel.background = element_rect(fill = ocean_color, color = NA, size = 2),
-      panel.grid.major = element_line(color = grid_color, size = grid_size)
+      panel.background = element_rect(fill = ocean_color, color = NA, linewidth = 2),
+      panel.grid.major = element_line(color = grid_color, linewidth = grid_size)
     )
   gp_map
   return(gp_map)
