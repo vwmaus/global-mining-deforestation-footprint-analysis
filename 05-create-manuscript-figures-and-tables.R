@@ -57,24 +57,27 @@ mine_features_areas |>
   st_drop_geometry() |> 
   mutate(Unknown = is.na(list_of_commodities)) |> 
   group_by(Unknown) |> 
-  summarise(area = sum(area_forest_loss_000, na.rm = TRUE)) |> 
-  mutate(perc = area / sum(area))
+  summarise(area = sum(area_forest_loss_000 - area_forest_loss_025, na.rm = TRUE)) |> 
+  mutate(perc = area / sum(area)) |> 
+  adorn_totals()
 
 # biome
 mine_features_areas |> 
   st_drop_geometry() |> 
   mutate(Unknown = is.na(biome)) |> 
   group_by(Unknown) |> 
-  summarise(area = sum(area_forest_loss_000, na.rm = TRUE)) |> 
-  mutate(perc = area / sum(area))
+  summarise(area = sum(area_forest_loss_000 - area_forest_loss_025, na.rm = TRUE)) |> 
+  mutate(perc = area / sum(area)) |> 
+  adorn_totals()
 
 # country
 mine_features_areas |> 
   st_drop_geometry() |> 
   mutate(Unknown = is.na(country)) |> 
   group_by(Unknown) |> 
-  summarise(area = sum(area_forest_loss_000, na.rm = TRUE)) |> 
-  mutate(perc = area / sum(area))
+  summarise(area = sum(area_forest_loss_000 - area_forest_loss_025, na.rm = TRUE)) |> 
+  mutate(perc = area / sum(area)) |> 
+  adorn_totals()
 
 # data check mining area allocation
 # commodity
@@ -83,7 +86,8 @@ mine_features_areas |>
   mutate(Unknown = is.na(list_of_commodities)) |> 
   group_by(Unknown) |> 
   summarise(area = sum(area_mine, na.rm = TRUE)) |> 
-  mutate(perc = area / sum(area))
+  mutate(perc = area / sum(area)) |> 
+  adorn_totals()
 
 # biome
 mine_features_areas |> 
@@ -91,7 +95,8 @@ mine_features_areas |>
   mutate(Unknown = is.na(biome)) |> 
   group_by(Unknown) |> 
   summarise(area = sum(area_mine, na.rm = TRUE)) |> 
-  mutate(perc = area / sum(area))
+  mutate(perc = area / sum(area)) |> 
+  adorn_totals()
 
 # country
 mine_features_areas |> 
@@ -99,7 +104,8 @@ mine_features_areas |>
   mutate(Unknown = is.na(country)) |> 
   group_by(Unknown) |> 
   summarise(area = sum(area_mine, na.rm = TRUE)) |> 
-  mutate(perc = area / sum(area))
+  mutate(perc = area / sum(area)) |> 
+  adorn_totals()
 
 # --------------------------------------------------------------------------------------
 # define ggplot theme ------------------------------------------------------------------
@@ -213,11 +219,6 @@ W_gp <- plot_goode_homolosine_world_map(ocean_color = "#e5f1f8", land_color = "g
 #                               ggarrange(SA_gp, AUS_IDN_gp, ncol = 2), 
 #                               legend = "bottom", common.legend = TRUE,
 #                               nrow = 2) 
-# 
-# ggplot2::ggsave(plot = multi_gp, bg = "#ffffff",
-#                 filename = dst_file_v2,
-#                 width = textwidth, height = textheight/1.7, units = "mm", scale = 1)
-
 
 ggplot2::ggsave(plot = W_gp, bg = "#ffffff",
                 filename = "output/fig-1-global-map.png",
@@ -485,8 +486,8 @@ tmp_table <- select(forest_loss, id, `Country` = country,
                     `Forest cover loss` = area_forest_loss_000) |>
   mutate(`Forest cover loss` = `Forest cover loss` - `(0, 25]%`) |> 
   group_by(id, `Country`) |> 
-  summarise(across(everything(), ~sum(.x, na.rm = TRUE))) |> 
-  right_join(st_drop_geometry(select(mine_features, id, Country = country, area_mine))) |> 
+  summarise(across(everything(), ~sum(.x, na.rm = TRUE)), .groups = "drop") |> 
+  full_join(st_drop_geometry(select(mine_features, id, Country = country, area_mine))) |> 
   rename("Mining area" = area_mine) |> 
   ungroup() |> 
   select(-id) |> 
@@ -514,6 +515,7 @@ tmp_table <- select(forest_loss, id, `Biome` = biome,
                     `(50, 75]%` = area_forest_loss_075,
                     `(75, 100]%` = area_forest_loss_100, 
                     `Forest cover loss` = area_forest_loss_000) |> 
+  mutate(`Forest cover loss` = `Forest cover loss` - `(0, 25]%`) |>
   group_by(id, `Biome`) |> 
   summarise(across(everything(), ~sum(.x, na.rm = TRUE))) |> # to ha
   full_join(st_drop_geometry(select(mine_features, id, area_mine))) |> 
@@ -536,7 +538,7 @@ tmp_table <- select(forest_loss, id, `Biome` = biome,
 
 xtable::print.xtable(tmp_table, table.placement = "!htpb", include.rownames = FALSE, caption.placement = "top", booktabs = TRUE, hline.after = c(0, nrow(tmp_table)-1, nrow(tmp_table)),
                      add.to.row = list(pos = list(-1), command = c("\\hline\n&\\multicolumn{4}{c}{Loss within each initial tree cover share}&&\\\\ \n\\cmidrule(lr){2-5}\n")),
-                     size="\\fontsize{10pt}{11pt}\\selectfont", file = "./output/tab-s2-area-biome.tex")
+                     size="\\fontsize{10pt}{11pt}\\selectfont", file = "./output/tab-s2-area-biome.tex", tabular.environment = "longtable", floating = FALSE)
 
 
 # commodity associated to forest cover loss
@@ -553,7 +555,7 @@ tmp_table <- str_c(na.omit(forest_loss$list_of_commodities), collapse = ",") |>
                 `(25, 50]%` = area_forest_loss_050, 
                 `(50, 75]%` = area_forest_loss_075,
                 `(75, 100]%` = area_forest_loss_100, 
-                `Forest cover loss` = area_forest_loss_000) |> 
+                `Forest cover loss` = area_forest_loss_000 - `(0, 25]%`) |> 
       group_by(Commodity) |> 
       summarise(across(everything(), ~sum(.x, na.rm = TRUE)*100))
   }) |> 
@@ -563,11 +565,13 @@ tmp_table <- str_c(na.omit(forest_loss$list_of_commodities), collapse = ",") |>
   xtable(digits = 0, 
          caption = 
          "Accumulated forest cover loss from 2000 to 2019 in hectares associated to mineral commodities. 
-         The column \\textit{Forest cover loss} includes only areas with initial tree cover higher than 25\\%.", label = "tab:s3-commodities") 
+         The column \\textit{Forest cover loss} includes only areas with initial tree cover higher than 25\\%.
+         Note that the row totals are not present on this table because that would include multiple countings
+         of the same forest loss area associated with various commodities.", label = "tab:s3-commodities") 
 
 xtable::print.xtable(tmp_table, table.placement = "!htpb", include.rownames = FALSE, caption.placement = "top", booktabs = TRUE, hline.after = c(0, nrow(tmp_table)),
                      add.to.row = list(pos = list(-1), command = c("\\hline\n&\\multicolumn{4}{c}{Loss within each initial tree cover share}&\\\\ \n\\cmidrule(lr){2-5}\n")),
-                     size="\\fontsize{10pt}{11pt}\\selectfont", tabular.environment = "longtable", file = "./output/tab-s3-area-commodity.tex")
+                     size="\\fontsize{10pt}{11pt}\\selectfont", tabular.environment = "longtable", floating = FALSE, file = "./output/tab-s3-area-commodity.tex")
 
 # protection level tree cover loss
 # PROTECTED CLASSES 
