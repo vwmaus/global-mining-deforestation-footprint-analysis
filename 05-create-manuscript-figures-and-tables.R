@@ -33,7 +33,15 @@ path_forest_loss_v2 <- "./output/global_mining_and_quarry_forest_loss_20221123b.
 path_to_mining_polygons <- "./output/global_mining_and_quarry_20220203.gpkg"
 
 mine_features <- st_read(path_to_mining_polygons) |> 
-  rename(area_mine = area)
+  rename(area_mine = area) |> 
+  mutate(country = str_replace_all(country, "^Russian Federation$", "Russia"),
+         country = str_replace_all(country, "^Democratic Republic of The Congo$", "Congo (DRC)"),
+         country = str_replace_all(country, "^United Republic of Tanzania$", "Tanzania"),
+         country = str_replace_all(country, "^Bonaire, Sint Eustatius and Saba$", "Caribbean Netherlands"),
+         country = str_replace_all(country, "^Congo$", "Republic of the Congo"),
+         country = str_replace_all(country, "^Us Virgin Islands$", "US Virgin Islands"),
+         country = str_replace_all(country, "^French Southern and Antarctic Lands$", "French Southern Lands"),
+         country = str_replace_all(country, "^French Southern and Antarctic Lands$", "French Southern Lands"))
 
 forest_loss <- read_csv(path_forest_loss_all) |> 
   filter(!is.na(year)) |> 
@@ -42,7 +50,15 @@ forest_loss <- read_csv(path_forest_loss_all) |>
          list_of_commodities = str_replace_all(list_of_commodities, "Bauxite", "Aluminum"),
          list_of_commodities = str_replace_all(list_of_commodities, "Zinc-Lead", "Zinc"),
          list_of_commodities = str_replace_all(list_of_commodities, "Heavy Rare Earths and Yttrium", "Unknown REE"),
-         list_of_commodities = str_replace_all(list_of_commodities, "Rare Earth Elements", "Unknown REE"))
+         list_of_commodities = str_replace_all(list_of_commodities, "Rare Earth Elements", "Unknown REE")) |> 
+  mutate(country = str_replace_all(country, "^Russian Federation$", "Russia"),
+         country = str_replace_all(country, "^Democratic Republic of The Congo$", "Congo (DRC)"),
+         country = str_replace_all(country, "^United Republic of Tanzania$", "Tanzania"),
+         country = str_replace_all(country, "^Bonaire, Sint Eustatius and Saba$", "Caribbean Netherlands"),
+         country = str_replace_all(country, "^Congo$", "Republic of the Congo"),
+         country = str_replace_all(country, "^Us Virgin Islands$", "US Virgin Islands"),
+         country = str_replace_all(country, "^French Southern and Antarctic Lands$", "French Southern Lands"),
+         country = str_replace_all(country, "^French Southern and Antarctic Lands$", "French Southern Lands"))
 
 forest_loss_accum <- forest_loss  |> 
   group_by(id, list_of_commodities, isoa3, country, ecoregion, biome) |> 
@@ -166,6 +182,7 @@ grid_50_forest_loss <- make_grid_50x50_25(mine_features_areas)
 
 # check total forest loss
 sum(grid_50_forest_loss$fl)
+max(grid_50_forest_loss$fl)*100
 skewness(grid_50_forest_loss$fl, na.rm = TRUE) 
 
 W_gp <- plot_goode_homolosine_world_map(ocean_color = "#e5f1f8", land_color = "gray95", family = font_family,
@@ -176,10 +193,11 @@ W_gp <- plot_goode_homolosine_world_map(ocean_color = "#e5f1f8", land_color = "g
   viridis::scale_fill_viridis(option = "turbo", begin = 0, end = 1, direction = 1, 
                               discrete = FALSE, 
                               trans = log10_trans(),
-                              breaks = c(0.01, 2.5, 400, 60000),
+                              limits = c(0.01, 70000),
                               labels = function(x) sprintf("%g", x)
                               ) +
   theme(
+    legend.spacing.x = unit(1.0, 'cm'),
     legend.position = "bottom",
     legend.direction = "horizontal",
     legend.justification = "center",
@@ -241,7 +259,6 @@ country_tbl <- forest_loss |>
   summarise(area = (sum(area_forest_loss_000, na.rm = TRUE) - sum(area_forest_loss_025, na.rm = TRUE))*100, .groups = "drop") |> 
   mutate(perc = 100 * area / sum(area)) |> 
   arrange(desc(area)) |> 
-  transmute(isoa3, country = str_replace(country, "Russian Federation", "Russia")) |> 
   slice(1:6) |> 
   mutate(country = factor(country, levels = country))
 
@@ -339,6 +356,14 @@ sloop_pvalue <- trend_bar %>%
                             ifelse(p.value > 0.01, str_c("(p-value=",round(p.value, 2),")"), ifelse(p.value < 0.001, "(p-value<0.001)", str_c("(p-value=",round(p.value, 3),")"))))) |> 
   mutate(year = c(2006, 2016), area = 25000) 
 
+
+# t-statistics for slope difference
+t = diff(sloop_pvalue$estimate) / sqrt(sum(sloop_pvalue$std.error^2))
+n = sum((trend_bar |> group_by(Period) |> summarise(n = n()))$n)-4
+p = 2*pt(-abs(t), n)
+round(p, 2)
+p<0.05 #p-value
+
 gp <- ggplot() + 
   geom_bar(mapping = aes(x = Year, y = area, fill = `Initial tree cover (%)`), 
            data = forest_loss_ts, stat="identity", width = 0.5) + 
@@ -363,6 +388,85 @@ gp <- ggplot() +
 
 ggsave(filename = str_c("./output/fig-s2-barplot-brazil.png"), plot = gp, bg = "#ffffff",
        width = 345, height = 140, units = "mm", scale = 1)
+
+
+# fig-s5 plot Brazil protected bar plot --------------------------------------------------------
+
+fract_forest_cover <- tibble::tibble(
+  `Initial tree cover (%)` = factor(c("(25, 50]", "(50, 75]", "(75, 100]"), 
+                                    levels = c("(25, 50]", "(50, 75]", "(75, 100]")),
+  name = c("area_forest_loss_050_p", 
+           "area_forest_loss_075_p", 
+           "area_forest_loss_100_p"))
+
+country_tbl <- tibble(
+  isoa3 = c("BRA"),
+  country = factor(c("Brazil"),
+                   levels = c("Brazil")))
+
+forest_loss_ts <- forest_loss |> 
+  filter(isoa3 %in% country_tbl$isoa3) |> 
+  mutate(area_forest_loss_000 = ifelse(is.na(area_forest_loss_000_p), 0, area_forest_loss_000_p) - ifelse(is.na(area_forest_loss_025_p), 0, area_forest_loss_025_p)) |> 
+  select(isoa3, year, area_forest_loss_000, area_forest_loss_050_p, 
+         area_forest_loss_075_p, area_forest_loss_100_p) |> 
+  group_by(isoa3, year) |> 
+  summarise(across(everything(), sum, na.rm = TRUE), .groups = 'drop') |> 
+  filter(year > 2000, year < 2020) |> 
+  pivot_longer(cols = c(-year, -area_forest_loss_000, -isoa3)) |> 
+  left_join(fract_forest_cover) |> 
+  left_join(country_tbl) |> 
+  mutate(Year = year, area = value * 100) |> # convert to ha 
+  mutate(Period = ifelse(year < 2013, "Year < 2013", "Year >= 2013"))
+
+trend_bar <- forest_loss_ts |> 
+  select(country, year, area_forest_loss_000) |> 
+  mutate(area_forest_loss_000 = area_forest_loss_000) |> 
+  distinct() |> 
+  mutate(Period = ifelse(year < 2013, "Year < 2013", "Year >= 2013"))
+
+sloop_pvalue <- trend_bar %>% 
+  group_by(Period) |> 
+  mutate(area_forest_loss_000 = 100 * area_forest_loss_000) |> 
+  summarise(out = list(tidy(lm(area_forest_loss_000 ~ year, data = cur_data())))) %>% 
+  unnest(out) |> 
+  filter(term == "year") |> 
+  mutate(sloop_text = str_c(Period, ": ","Forest loss annual increment: ", round(estimate, 0), " ha ", 
+                            ifelse(p.value > 0.01, str_c("(p-value=",round(p.value, 2),")"), ifelse(p.value < 0.001, "(p-value<0.001)", str_c("(p-value=",round(p.value, 3),")"))))) |> 
+  mutate(year = c(2006, 2016), area = 25000) 
+
+# t-statistics for slope difference
+t = diff(sloop_pvalue$estimate) / sqrt(sum(sloop_pvalue$std.error^2))
+n = sum((trend_bar |> group_by(Period) |> summarise(n = n()))$n)-4
+p = 2*pt(-abs(t), n)
+p
+p<0.01 #p-value
+
+gp <- ggplot() + 
+  geom_bar(mapping = aes(x = Year, y = area, fill = `Initial tree cover (%)`), 
+           data = forest_loss_ts, stat="identity", width = 0.5) + 
+  stat_smooth(aes(x = year, y = area_forest_loss_000*100, group = Period), 
+              data = trend_bar, method = "lm", show.legend = FALSE, 
+              se = FALSE, color = "black", fill = "black", linewidth = .5) + 
+  geom_text(mapping = aes(x = year, y = area, label = sloop_text), data = sloop_pvalue, size = 3.8) + 
+  theme_linedraw() + 
+  theme(axis.text = ggplot2::element_text(size = font_size), 
+        text = ggplot2::element_text(size = font_size),
+        legend.text = element_text(size = font_size),
+        legend.title = element_text(size = font_size),
+        legend.position = "bottom",
+        legend.direction = "horizontal",
+        legend.justification = "center",
+        legend.box.spacing = unit(0.0, "cm"),
+        legend.key.size = unit(0.3, "cm")) + 
+  scale_fill_grey(start = .7, end = 0, guide = guide_legend(direction = "horizontal", title.position = "top")) +
+  scale_y_continuous(labels = label_number(scale = 1e-3, accuracy = 1)) + 
+  scale_x_continuous(labels = seq(2000, 2019, 2), breaks = seq(2000, 2019, 2)) + 
+  ylab("Annual forest loss (K ha)") 
+
+ggsave(filename = str_c("./output/fig-s5-barplot-brazil-protected.png"), plot = gp, bg = "#ffffff",
+       width = 345, height = 140, units = "mm", scale = 1)
+
+
 
 
 # --------------------------------------------------------------------------------------
@@ -478,6 +582,22 @@ ggsave(filename = str_c("./output/fig-3-barplot-commodities.png"), plot = gp, bg
 # supplementary tables -----------------------------------------------------------------
 
 # country table 
+# trend per country
+trend_bar <- forest_loss |> 
+  mutate(area_forest_loss_000 = ifelse(is.na(area_forest_loss_000), 0, area_forest_loss_000) - ifelse(is.na(area_forest_loss_025), 0, area_forest_loss_025)) |> 
+  select(isoa3, country, year, area_forest_loss_000) |> 
+  group_by(isoa3, country, year) |> 
+  summarise(across(everything(), sum, na.rm = TRUE), .groups = 'drop') |> 
+  filter(year > 2000, year < 2020) |> 
+  group_by(country) |> 
+  mutate(area_forest_loss_000 = area_forest_loss_000 * 100) |> 
+  summarise(out = list(tidy(lm(area_forest_loss_000 ~ year, data = cur_data())))) %>% 
+  unnest(out) |> 
+  filter(term == "year") |> 
+  arrange(desc(estimate)) |> 
+  transmute(Country = country, `Annual increment` = str_c(round(estimate, 2), 
+     c("***", "**", "*", "")[findInterval(p.value, c(0, 0.001, 0.01, 0.05, 1), left.open = T, rightmost.closed = T)], " (", round(std.error,2), ")"))
+
 tmp_table <- select(forest_loss, id, `Country` = country,
                     `(0, 25]%` = area_forest_loss_025,
                     `(25, 50]%` = area_forest_loss_050, 
@@ -499,13 +619,17 @@ tmp_table <- select(forest_loss, id, `Country` = country,
   mutate(`Forest cover loss` = ifelse(Country == "Total", round(`Forest cover loss`, 0), str_c(round(`Forest cover loss`, 0), " (", round(per_fl,1),"%)")), 
          `Mining area` = ifelse(Country == "Total", round(`Mining area`, 0), str_c(round(`Mining area`,0), " (", round(per_ma,1),"%)"))) |> 
   select(-per_fl, -per_ma) |> 
+  left_join(trend_bar) |> 
+  replace_na(list(`Annual increment` = "-")) |> 
   xtable(digits = 0, 
          caption = 
          "Accumulated forest cover loss from 2000 to 2019 and the total mining area per country in hectares.
-         The column \\textit{Forest cover loss} includes only areas with initial tree cover higher than 25\\%.", label = "tab:s1-country") 
+         The column \\textit{Forest cover loss} includes only areas with initial tree cover higher than 25\\%.
+         The percentage in parentheses is in relation to the total of each column.", label = "tab:s1-country") 
 
-xtable::print.xtable(tmp_table, table.placement = "!htpb", include.rownames = FALSE, caption.placement = "top", booktabs = TRUE, hline.after = c(0, nrow(tmp_table)-1, nrow(tmp_table)),
-                     add.to.row = list(pos = list(-1), command = c("\\hline\n&\\multicolumn{4}{c}{Loss within each initial tree cover share}&&\\\\ \n\\cmidrule(lr){2-5}\n")),
+xtable::print.xtable(tmp_table, table.placement = "!htpb", include.rownames = FALSE, caption.placement = "top", booktabs = TRUE, hline.after = c(0, nrow(tmp_table)-1),
+                     add.to.row = list(pos = list(-1, nrow(tmp_table)), command = c("\\hline\n&\\multicolumn{4}{c}{Loss within each initial tree cover share}&&\\\\ \n\\cmidrule(lr){2-5}\n",
+                                       "\\bottomrule\n \\multicolumn{8}{l}{Annual increment standard errors in parentheses. * p \\textless~0.05, ** p \\textless~0.01, *** p \\textless~0.001}")),
                      size="\\fontsize{10pt}{11pt}\\selectfont", tabular.environment = "longtable", file = "./output/tab-s1-area-country.tex", floating = FALSE)
 
 # biome table 
@@ -615,45 +739,87 @@ xtable::print.xtable(tmp_table, table.placement = "!htpb", include.rownames = FA
 
 # --------------------------------------------------------------------------------------
 # figs1 - plot global tree cover loss 50x50 grid cells ---------------------------------
-mine_features <- st_read(path_to_mining_polygons) |> 
-  rename(area_mine = area)
-
-forest_loss <- read_csv(path_forest_loss_v2) |> 
+forest_loss_accum_v2 <- read_csv(path_forest_loss_v2) |> 
   filter(!is.na(year)) |> 
-  filter(year > 2000, year < 2020) 
-
-forest_loss_accum <- forest_loss  |> 
+  filter(year > 2000, year < 2020)  |> 
   group_by(id, list_of_commodities, isoa3, country, ecoregion, biome) |> 
   summarise(across(matches('area_forest_loss'), sum)) 
 
-mine_features_areas <- mine_features |> 
-  left_join(forest_loss_accum)
+mine_features_areas_v2 <- mine_features |> 
+  left_join(forest_loss_accum_v2)
 
 # data check 
-mine_features_areas |> 
+mine_features_areas_v2 |> 
   st_drop_geometry() |> 
   mutate(Unknown = is.na(list_of_commodities)) |> 
   group_by(Unknown) |> 
   summarise(area = sum(area_forest_loss_000 - area_forest_loss_025, na.rm = TRUE)) |> 
   mutate(perc = area / sum(area))
 
-grid_50_forest_loss <- make_grid_50x50_25(mine_features_areas)
+grid_50_forest_loss_v2 <- make_grid_50x50_25(mine_features_areas_v2)
 
 # check total forest loss
+sum(grid_50_forest_loss$fl)
+sum(grid_50_forest_loss_v2$fl)
+
+grid_50_forest_loss_osm <- st_join(grid_50_forest_loss, st_centroid(grid_50_forest_loss_v2)) |> 
+  replace_na(replace = list(fl.x = 0, fl.y = 0)) |> 
+  transmute(fl = fl.x - fl.y) |> 
+  filter(fl > 0)
+
+range(grid_50_forest_loss$fl)*100
+range(grid_50_forest_loss_osm$fl)*100
+range(grid_50_forest_loss_v2$fl)*100
+
+# this
+sum(grid_50_forest_loss_v2$fl) + sum(grid_50_forest_loss_osm$fl, na.rm = TRUE)
+# should be equal or close to this
 sum(grid_50_forest_loss$fl)
 
 W_gp <- plot_goode_homolosine_world_map(ocean_color = "#e5f1f8", land_color = "gray95", family = font_family,
                                         grid_color = "grey60", grid_size = 0.1,
                                         country_borders_color = "grey60", country_borders_size = 0.1) +
-  ggplot2::geom_sf(data = grid_50_forest_loss, mapping = aes(fill = fl * 100), color = NA, lwd = 0, size = 0) + # * 100 from km2 to ha
+  ggplot2::geom_sf(data = grid_50_forest_loss_v2, mapping = aes(fill = fl * 100), color = NA, lwd = 0, size = 0) + # * 100 from km2 to ha
   ggplot2::coord_sf(crs = "+proj=igh", expand = FALSE) +
   viridis::scale_fill_viridis(option = "turbo", begin = 0, end = 1, direction = 1, 
                               discrete = FALSE, 
                               trans = log10_trans(),
-                              breaks = c(0.01, 2.5, 400, 60000),
+                              limits = c(0.01, 70000),
+                              #breaks = c(0.01, 1, 100, 70000),
+                              # labels = c(0.01, 1, 100, 60000)
                               labels = function(x) sprintf("%g", x)
   ) +
   theme(
+    legend.position = "none",
+    legend.direction = "horizontal",
+    legend.justification = "center",
+    legend.box.spacing = unit(0.0, "cm"),
+    legend.key.size = unit(0.3, "cm"),
+    legend.key.width = unit(textheight/15, "mm"),
+    plot.margin = margin(t = -1, r = -1, b = 0, l = -1, unit = "cm")
+  ) +
+  labs(fill = bquote(Area~(ha))) + 
+  th
+
+ggplot2::ggsave(plot = W_gp, bg = "#ffffff",
+                filename = "output/fig-s1-global-map-maus.png",
+                width = textwidth, height = 170, units = "mm", scale = 1)
+
+W_gp <- plot_goode_homolosine_world_map(ocean_color = "#e5f1f8", land_color = "gray95", family = font_family,
+                                        grid_color = "grey60", grid_size = 0.1,
+                                        country_borders_color = "grey60", country_borders_size = 0.1) +
+  ggplot2::geom_sf(data = grid_50_forest_loss_osm, mapping = aes(fill = fl * 100), color = NA, lwd = 0, size = 0) + # * 100 from km2 to ha
+  ggplot2::coord_sf(crs = "+proj=igh", expand = FALSE) +
+  viridis::scale_fill_viridis(option = "turbo", begin = 0, end = 1, direction = 1, 
+                              discrete = FALSE, 
+                              trans = log10_trans(),
+                              limits = c(0.01, 70000),
+                              # breaks = c(0.01, 1, 100, 60000),
+                              # labels = c(0.01, 1, 100, 60000)
+                              labels = function(x) sprintf("%g", x)
+  ) +
+  theme(
+    legend.spacing.x = unit(1.0, 'cm'),
     legend.position = "bottom",
     legend.direction = "horizontal",
     legend.justification = "center",
@@ -666,7 +832,7 @@ W_gp <- plot_goode_homolosine_world_map(ocean_color = "#e5f1f8", land_color = "g
   th
 
 ggplot2::ggsave(plot = W_gp, bg = "#ffffff",
-                filename = "output/fig-s1-global-map.png",
+                filename = "output/fig-s6-global-map-osm.png",
                 width = textwidth, height = 170, units = "mm", scale = 1)
 
 # --------------------------------------------------------------------------------------
@@ -732,3 +898,104 @@ gp <- left_join(all, wu) |>
 ggsave(filename = str_c("./output/fig-s4-spatial-distribution.png"), plot = gp, bg = "#ffffff",
        width = 345, height = 140, units = "mm", scale = 1)
 
+
+#######################################
+#### Additional supporting calculations 
+country_tbl <- forest_loss |> 
+  filter(2000 < year, year < 2020) |> 
+  group_by(country) |> 
+  summarise(loss_mining = (sum(area_forest_loss_000, na.rm = TRUE) - sum(area_forest_loss_025, na.rm = TRUE))*100, .groups = "drop") |> 
+  arrange(desc(loss_mining)) |> 
+  mutate(country = str_replace_all(country, "^Russian Federation$", "Russia"),
+         country = str_replace_all(country, "^Democratic Republic of The Congo$", "Congo (DRC)"),
+         country = str_replace_all(country, "^United Republic of Tanzania$", "Tanzania"),
+         country = str_replace_all(country, "^Bonaire, Sint Eustatius and Saba$", "Caribbean Netherlands"),
+         country = str_replace_all(country, "^Congo$", "Republic of the Congo"),
+         country = str_replace_all(country, "^Us Virgin Islands$", "US Virgin Islands"))
+
+tribble(~country, ~loss, ~loss_source,
+"Brazil", 57000000, "https://gfw.global/3ZCkkuf",
+"Indonesia", 26800000, "https://gfw.global/3Xquyw3",
+"Russia", 65500000, "https://gfw.global/3IHJP7D",
+"Canada", 43600000, "https://gfw.global/3H2cP8H",
+"United States", 40600000, "https://gfw.global/3Gwtuja",
+"Peru", 3120000, "https://gfw.global/3XauIYw",
+"Australia", 6750000, "https://gfw.global/3X9OXWu") |> 
+  left_join(country_tbl) |> 
+  mutate(perc_mining_loss = round(loss_mining / loss *100, 1), loss_Mha = 1e-6*loss, loss_mining_Mha = 1e-6*loss_mining)
+
+forest_loss |> 
+  filter(2000 < year, year < 2020) |> 
+  group_by(isoa3, country, biome) |> 
+  summarise(loss_mining = (sum(area_forest_loss_000, na.rm = TRUE) - sum(area_forest_loss_025, na.rm = TRUE))*100, .groups = "drop") |> 
+  filter(biome == "Tropical & Subtropical Moist Broadleaf Forests") |> 
+  mutate(loss_perc = loss_mining / sum(loss_mining) * 100) |> 
+  arrange(desc(loss_mining))
+  
+forest_loss |> 
+  filter(2000 < year, year < 2020) |> 
+  group_by(isoa3, country, biome) |> 
+  summarise(loss_mining = (sum(area_forest_loss_000, na.rm = TRUE) - sum(area_forest_loss_025, na.rm = TRUE))*100, .groups = "drop") |> 
+  filter(biome == "Boreal Forests/Taiga") |> 
+  mutate(loss_perc = loss_mining / sum(loss_mining) * 100) |> 
+  arrange(desc(loss_mining))
+
+forest_loss |> 
+  filter(2000 < year, year < 2020) |> 
+  group_by(isoa3, country, biome) |> 
+  summarise(loss_mining = (sum(area_forest_loss_000, na.rm = TRUE) - sum(area_forest_loss_025, na.rm = TRUE))*100, .groups = "drop") |> 
+  filter(biome == "Temperate Broadleaf & Mixed Forests") |> 
+  mutate(loss_perc = loss_mining / sum(loss_mining) * 100) |> 
+  arrange(desc(loss_mining))
+
+# gold
+forest_loss |> 
+  filter(2000 < year, year < 2020) |> 
+  filter(str_detect(list_of_commodities, "Gold")) |> 
+  group_by(isoa3, country) |> 
+  summarise(loss_mining = (sum(area_forest_loss_000, na.rm = TRUE) - sum(area_forest_loss_025, na.rm = TRUE))*100, .groups = "drop") |> 
+  mutate(loss_perc = loss_mining / sum(loss_mining) * 100) |> 
+  arrange(desc(loss_mining))
+
+forest_loss |> 
+  filter(2000 < year, year < 2020) |> 
+  filter(str_detect(list_of_commodities, "Gold")) |> 
+  group_by(biome) |> 
+  summarise(loss_mining = (sum(area_forest_loss_000, na.rm = TRUE) - sum(area_forest_loss_025, na.rm = TRUE))*100, .groups = "drop") |> 
+  mutate(loss_perc = loss_mining / sum(loss_mining) * 100) |> 
+  arrange(desc(loss_mining))
+
+# coal 
+forest_loss |> 
+  filter(2000 < year, year < 2020) |> 
+  filter(str_detect(list_of_commodities, "Coal")) |> 
+  group_by(isoa3, country) |> 
+  summarise(loss_mining = (sum(area_forest_loss_000, na.rm = TRUE) - sum(area_forest_loss_025, na.rm = TRUE))*100, .groups = "drop") |> 
+  mutate(loss_perc = loss_mining / sum(loss_mining) * 100) |> 
+  arrange(desc(loss_mining))
+
+forest_loss |> 
+  filter(2000 < year, year < 2020) |> 
+  filter(str_detect(list_of_commodities, "Gold")) |> 
+  group_by(biome) |> 
+  summarise(loss_mining = (sum(area_forest_loss_000, na.rm = TRUE) - sum(area_forest_loss_025, na.rm = TRUE))*100, .groups = "drop") |> 
+  mutate(loss_perc = loss_mining / sum(loss_mining) * 100) |> 
+  arrange(desc(loss_mining))
+
+
+# copper
+forest_loss |> 
+  filter(2000 < year, year < 2020) |> 
+  filter(str_detect(list_of_commodities, "Copper")) |> 
+  group_by(isoa3, country) |> 
+  summarise(loss_mining = (sum(area_forest_loss_000, na.rm = TRUE) - sum(area_forest_loss_025, na.rm = TRUE))*100, .groups = "drop") |> 
+  mutate(loss_perc = loss_mining / sum(loss_mining) * 100) |> 
+  arrange(desc(loss_mining))
+
+forest_loss |> 
+  filter(2000 < year, year < 2020) |> 
+  filter(str_detect(list_of_commodities, "Copper")) |> 
+  group_by(biome) |> 
+  summarise(loss_mining = (sum(area_forest_loss_000, na.rm = TRUE) - sum(area_forest_loss_025, na.rm = TRUE))*100, .groups = "drop") |> 
+  mutate(loss_perc = loss_mining / sum(loss_mining) * 100) |> 
+  arrange(desc(loss_mining))
