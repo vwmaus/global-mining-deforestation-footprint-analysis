@@ -680,12 +680,12 @@ tmp_table <- str_c(na.omit(forest_loss$list_of_commodities), collapse = ",") |>
                 `(25, 50]%` = area_forest_loss_050, 
                 `(50, 75]%` = area_forest_loss_075,
                 `(75, 100]%` = area_forest_loss_100,
-                `Forest cover loss` = 100 * (area_forest_loss_000 - `(0, 25]%`),
+                `Forest cover loss` = (area_forest_loss_000 - `(0, 25]%`),
                 `(0, 100]` = `Forest cover loss`) |> 
       group_by(Commodity, year) |> 
       summarise(across(everything(), ~sum(.x, na.rm = TRUE)*100), .groups = "drop") |> 
       group_by(Commodity) |> 
-      summarise(across(starts_with("("), ~sum(.x, na.rm = TRUE)*100), out = list(tidy(lm(`Forest cover loss` ~ year, data = cur_data()))), .groups = "drop") |> 
+      summarise(across(starts_with("("), ~sum(.x, na.rm = TRUE)), out = list(tidy(lm(`Forest cover loss` ~ year, data = cur_data()))), .groups = "drop") |> 
       rename(`Forest cover loss` = `(0, 100]`) |> 
       unnest(out) |> 
       filter(term == "year") |> 
@@ -706,7 +706,7 @@ tmp_table <- str_c(na.omit(forest_loss$list_of_commodities), collapse = ",") |>
 xtable::print.xtable(tmp_table, table.placement = "!htpb", include.rownames = FALSE, caption.placement = "top", booktabs = TRUE, hline.after = c(0),
                      add.to.row = list(pos = list(-1, nrow(tmp_table)), 
                            command = c("\\hline\n&\\multicolumn{4}{c}{Loss within each initial tree cover share}&\\\\ \n\\cmidrule(lr){2-5}\n",
-                                       "\\bottomrule\n \\multicolumn{8}{l}{Standard errors of annual increment in parentheses. * p \\textless~0.05, ** p \\textless~0.01, *** p \\textless~0.001}")),
+                                       "\\bottomrule\n \\multicolumn{7}{l}{Standard errors of annual increment in parentheses. * p \\textless~0.05, ** p \\textless~0.01, *** p \\textless~0.001}")),
                      size="\\fontsize{10pt}{11pt}\\selectfont", tabular.environment = "longtable", floating = FALSE, file = "./output/tab-s3-area-commodity.tex")
 
 # protection level tree cover loss
@@ -775,18 +775,17 @@ trend_tbl <- group_by(comm_tbl, Commodity) |>
       filter(term == "year") |> 
   arrange(desc(estimate)) |> 
   slice(1:12) |> 
+  mutate(Commodity = factor(Commodity, levels = Commodity, labels = Commodity)) |> 
   mutate(sloop_text = str_c("Forest loss annual increment: ", round(estimate, 0), " ha ", 
                             ifelse(p.value > 0.01, str_c("(p-value=",round(p.value, 2),")"), ifelse(p.value < 0.001, "(p-value<0.001)", str_c("(p-value=",round(p.value, 3),")"))))) |> 
   mutate(Year = 2010, Area = 58000) |> 
-  select(-p.value, -estimate, -term , -std.error, -statistic) |> 
-  arrange(desc(total_loss)) |> 
-  mutate(Commodity = factor(Commodity, levels = Commodity, labels = Commodity))
+  select(-p.value, estimate, -term , -std.error, -statistic) 
 
 forest_loss_ts <- comm_tbl |> 
   filter(Commodity %in% trend_tbl$Commodity) |> 
   pivot_longer(cols = c(-year, -`Total loss`, -Commodity), names_to = "Initial tree cover (%)", values_to = "Area") |> 
   rename(Year = year) |> 
-  mutate(Commodity = factor(Commodity, levels = trend_tbl$Commodity[order(-trend_tbl$total_loss)], labels = trend_tbl$Commodity[order(-trend_tbl$total_loss)]))
+  mutate(Commodity = factor(Commodity, levels = levels(trend_tbl$Commodity), labels = levels(trend_tbl$Commodity)))
 
 trend_bar <- forest_loss_ts |> 
   select(Commodity, Year, `Total loss`) |> 
