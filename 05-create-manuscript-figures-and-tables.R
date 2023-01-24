@@ -291,7 +291,8 @@ sloop_pvalue <- trend_bar %>%
 gp <- ggplot() + 
   facet_wrap(~country) + 
   geom_bar(mapping = aes(x = Year, y = area, fill = `Initial tree cover (%)`), data = forest_loss_ts, stat="identity", width = 0.5) + 
-  stat_smooth(aes(x = year, y = area_forest_loss_000*100, group = country), data = trend_bar, method = "lm", show.legend = FALSE, se = FALSE, color = "black", fill = "black", linewidth = .5) + 
+  stat_smooth(aes(x = year, y = area_forest_loss_000*100, group = country), data = trend_bar, method = "lm", 
+              show.legend = FALSE, se = FALSE, color = "black", fill = "black", linewidth = .5, linetype = 2) + 
   geom_text(mapping = aes(x = year, y = area, label = sloop_text), data = sloop_pvalue, size = 3.8) + 
   theme_linedraw() + 
   theme(axis.text = ggplot2::element_text(size = font_size), 
@@ -338,13 +339,15 @@ forest_loss_ts <- forest_loss |>
   left_join(fract_forest_cover) |> 
   left_join(country_tbl) |> 
   mutate(Year = year, area = value * 100) |> # convert to ha 
-  mutate(Period = ifelse(year < 2013, "Year < 2013", "Year >= 2013"))
+  mutate(Period = ifelse(year < 2013, "Year < 2013", "Year >= 2013"),
+         facet = "Brazil - Mining and quarrying")
 
 trend_bar <- forest_loss_ts |> 
   select(country, year, area_forest_loss_000) |> 
   mutate(area_forest_loss_000 = area_forest_loss_000) |> 
   distinct() |> 
-  mutate(Period = ifelse(year < 2013, "Year < 2013", "Year >= 2013"))
+  mutate(Period = ifelse(year < 2013, "Year < 2013", "Year >= 2013"),
+         facet = "Brazil - Mining and quarrying")
 
 sloop_pvalue <- trend_bar %>% 
   group_by(Period) |> 
@@ -354,7 +357,7 @@ sloop_pvalue <- trend_bar %>%
   filter(term == "year") |> 
   mutate(sloop_text = str_c(Period, ": ","Forest loss annual increment: ", round(estimate, 0), " ha ", 
                             ifelse(p.value > 0.01, str_c("(p-value=",round(p.value, 2),")"), ifelse(p.value < 0.001, "(p-value<0.001)", str_c("(p-value=",round(p.value, 3),")"))))) |> 
-  mutate(year = c(2006, 2016), area = 25000) 
+  mutate(year = c(2010, 2010), area = c(25000, 23500), facet = "Brazil - Mining and quarrying")
 
 
 # t-statistics for slope difference
@@ -364,12 +367,64 @@ p = 2*pt(-abs(t), n)
 round(p, 2)
 p<0.05 #p-value
 
+fract_forest_cover <- tibble::tibble(
+  `Initial tree cover (%)` = factor(c("(25, 50]", "(50, 75]", "(75, 100]"), 
+                                    levels = c("(25, 50]", "(50, 75]", "(75, 100]")),
+  name = c("area_forest_loss_050_p", 
+           "area_forest_loss_075_p", 
+           "area_forest_loss_100_p"))
+
+forest_loss_ts2 <- forest_loss |> 
+  filter(isoa3 %in% country_tbl$isoa3) |> 
+  mutate(area_forest_loss_000 = ifelse(is.na(area_forest_loss_000_p), 0, area_forest_loss_000_p) - ifelse(is.na(area_forest_loss_025_p), 0, area_forest_loss_025_p)) |> 
+  select(isoa3, year, area_forest_loss_000, area_forest_loss_050_p, 
+         area_forest_loss_075_p, area_forest_loss_100_p) |> 
+  group_by(isoa3, year) |> 
+  summarise(across(everything(), sum, na.rm = TRUE), .groups = 'drop') |> 
+  filter(year > 2000, year < 2020) |> 
+  pivot_longer(cols = c(-year, -area_forest_loss_000, -isoa3)) |> 
+  left_join(fract_forest_cover) |> 
+  left_join(country_tbl) |> 
+  mutate(Year = year, area = value * 100) |> # convert to ha 
+  mutate(Period = ifelse(year < 2013, "Year < 2013", "Year >= 2013"),
+         facet = "Brazil - Mining and quarrying under protection")
+
+trend_bar2 <- forest_loss_ts2 |> 
+  select(country, year, area_forest_loss_000) |> 
+  mutate(area_forest_loss_000 = area_forest_loss_000) |> 
+  distinct() |> 
+  mutate(Period = ifelse(year < 2013, "Year < 2013", "Year >= 2013"),
+         facet = "Brazil - Mining and quarrying under protection")
+
+sloop_pvalue2 <- trend_bar2 %>% 
+  group_by(Period) |> 
+  mutate(area_forest_loss_000 = 100 * area_forest_loss_000) |> 
+  summarise(out = list(tidy(lm(area_forest_loss_000 ~ year, data = cur_data())))) %>% 
+  unnest(out) |> 
+  filter(term == "year") |> 
+  mutate(sloop_text = str_c(Period, ": ","Forest loss annual increment: ", round(estimate, 0), " ha ", 
+                            ifelse(p.value > 0.01, str_c("(p-value=",round(p.value, 2),")"), ifelse(p.value < 0.001, "(p-value<0.001)", str_c("(p-value=",round(p.value, 3),")"))))) |> 
+  mutate(year = c(2010), area = c(25000, 23500),
+         facet = "Brazil - Mining and quarrying under protection") 
+
+# t-statistics for slope difference
+t = diff(sloop_pvalue2$estimate) / sqrt(sum(sloop_pvalue2$std.error^2))
+n = sum((trend_bar |> group_by(Period) |> summarise(n = n()))$n)-4
+p = 2*pt(-abs(t), n)
+p
+p<0.01 #p-value
+
+forest_loss_ts <- bind_rows(forest_loss_ts, forest_loss_ts2)
+sloop_pvalue <- bind_rows(sloop_pvalue, sloop_pvalue2)
+trend_bar <- bind_rows(trend_bar, trend_bar2)
+
 gp <- ggplot() + 
+  facet_wrap(~facet) + 
   geom_bar(mapping = aes(x = Year, y = area, fill = `Initial tree cover (%)`), 
            data = forest_loss_ts, stat="identity", width = 0.5) + 
   stat_smooth(aes(x = year, y = area_forest_loss_000*100, group = Period), 
               data = trend_bar, method = "lm", show.legend = FALSE, 
-              se = FALSE, color = "black", fill = "black", linewidth = .5) + 
+              se = FALSE, color = "black", fill = "black", linewidth = .5, linetype = 2) + 
   geom_text(mapping = aes(x = year, y = area, label = sloop_text), data = sloop_pvalue, size = 3.8) + 
   theme_linedraw() + 
   theme(axis.text = ggplot2::element_text(size = font_size), 
@@ -388,84 +443,6 @@ gp <- ggplot() +
 
 ggsave(filename = str_c("./output/fig-s2-barplot-brazil.png"), plot = gp, bg = "#ffffff",
        width = 345, height = 140, units = "mm", scale = 1)
-
-
-# fig-s5 plot Brazil protected bar plot --------------------------------------------------------
-
-fract_forest_cover <- tibble::tibble(
-  `Initial tree cover (%)` = factor(c("(25, 50]", "(50, 75]", "(75, 100]"), 
-                                    levels = c("(25, 50]", "(50, 75]", "(75, 100]")),
-  name = c("area_forest_loss_050_p", 
-           "area_forest_loss_075_p", 
-           "area_forest_loss_100_p"))
-
-country_tbl <- tibble(
-  isoa3 = c("BRA"),
-  country = factor(c("Brazil"),
-                   levels = c("Brazil")))
-
-forest_loss_ts <- forest_loss |> 
-  filter(isoa3 %in% country_tbl$isoa3) |> 
-  mutate(area_forest_loss_000 = ifelse(is.na(area_forest_loss_000_p), 0, area_forest_loss_000_p) - ifelse(is.na(area_forest_loss_025_p), 0, area_forest_loss_025_p)) |> 
-  select(isoa3, year, area_forest_loss_000, area_forest_loss_050_p, 
-         area_forest_loss_075_p, area_forest_loss_100_p) |> 
-  group_by(isoa3, year) |> 
-  summarise(across(everything(), sum, na.rm = TRUE), .groups = 'drop') |> 
-  filter(year > 2000, year < 2020) |> 
-  pivot_longer(cols = c(-year, -area_forest_loss_000, -isoa3)) |> 
-  left_join(fract_forest_cover) |> 
-  left_join(country_tbl) |> 
-  mutate(Year = year, area = value * 100) |> # convert to ha 
-  mutate(Period = ifelse(year < 2013, "Year < 2013", "Year >= 2013"))
-
-trend_bar <- forest_loss_ts |> 
-  select(country, year, area_forest_loss_000) |> 
-  mutate(area_forest_loss_000 = area_forest_loss_000) |> 
-  distinct() |> 
-  mutate(Period = ifelse(year < 2013, "Year < 2013", "Year >= 2013"))
-
-sloop_pvalue <- trend_bar %>% 
-  group_by(Period) |> 
-  mutate(area_forest_loss_000 = 100 * area_forest_loss_000) |> 
-  summarise(out = list(tidy(lm(area_forest_loss_000 ~ year, data = cur_data())))) %>% 
-  unnest(out) |> 
-  filter(term == "year") |> 
-  mutate(sloop_text = str_c(Period, ": ","Forest loss annual increment: ", round(estimate, 0), " ha ", 
-                            ifelse(p.value > 0.01, str_c("(p-value=",round(p.value, 2),")"), ifelse(p.value < 0.001, "(p-value<0.001)", str_c("(p-value=",round(p.value, 3),")"))))) |> 
-  mutate(year = c(2006, 2016), area = 25000) 
-
-# t-statistics for slope difference
-t = diff(sloop_pvalue$estimate) / sqrt(sum(sloop_pvalue$std.error^2))
-n = sum((trend_bar |> group_by(Period) |> summarise(n = n()))$n)-4
-p = 2*pt(-abs(t), n)
-p
-p<0.01 #p-value
-
-gp <- ggplot() + 
-  geom_bar(mapping = aes(x = Year, y = area, fill = `Initial tree cover (%)`), 
-           data = forest_loss_ts, stat="identity", width = 0.5) + 
-  stat_smooth(aes(x = year, y = area_forest_loss_000*100, group = Period), 
-              data = trend_bar, method = "lm", show.legend = FALSE, 
-              se = FALSE, color = "black", fill = "black", linewidth = .5) + 
-  geom_text(mapping = aes(x = year, y = area, label = sloop_text), data = sloop_pvalue, size = 3.8) + 
-  theme_linedraw() + 
-  theme(axis.text = ggplot2::element_text(size = font_size), 
-        text = ggplot2::element_text(size = font_size),
-        legend.text = element_text(size = font_size),
-        legend.title = element_text(size = font_size),
-        legend.position = "bottom",
-        legend.direction = "horizontal",
-        legend.justification = "center",
-        legend.box.spacing = unit(0.0, "cm"),
-        legend.key.size = unit(0.3, "cm")) + 
-  scale_fill_grey(start = .7, end = 0, guide = guide_legend(direction = "horizontal", title.position = "top")) +
-  scale_y_continuous(labels = label_number(scale = 1e-3, accuracy = 1)) + 
-  scale_x_continuous(labels = seq(2000, 2019, 2), breaks = seq(2000, 2019, 2)) + 
-  ylab("Annual forest loss (K ha)") 
-
-ggsave(filename = str_c("./output/fig-s5-barplot-brazil-protected.png"), plot = gp, bg = "#ffffff",
-       width = 345, height = 140, units = "mm", scale = 1)
-
 
 
 
@@ -508,7 +485,8 @@ sloop_pvalue <- trend_bar %>%
 gp <- ggplot() + 
   facet_wrap(~biome, ncol = 3, scales = "free_y") + 
   geom_bar(mapping = aes(x = Year, y = area, fill = `Initial tree cover (%)`), data = forest_loss_ts, stat="identity", width = 0.5) + 
-  stat_smooth(aes(x = year, y = area_forest_loss_000*100, group = biome), data = trend_bar, method = "lm", show.legend = FALSE, se = FALSE, color = "black", fill = "black", linewidth = .5) + 
+  stat_smooth(aes(x = year, y = area_forest_loss_000*100, group = biome), data = trend_bar, method = "lm", 
+              show.legend = FALSE, se = FALSE, color = "black", fill = "black", linewidth = .5, linetype = 2) + 
   geom_text(mapping = aes(x = year, y = area, label = sloop_text), data = sloop_pvalue, size = 3.8) + 
   theme_linedraw() + 
   theme(axis.text = ggplot2::element_text(size = font_size), 
@@ -794,7 +772,8 @@ trend_bar <- forest_loss_ts |>
 gp <- ggplot() + 
   facet_wrap(~Commodity, ncol = 3) + 
   geom_bar(mapping = aes(x = Year, y = Area, fill = `Initial tree cover (%)`), data = forest_loss_ts, stat="identity", width = 0.5) + 
-  stat_smooth(aes(x = Year, y = `Total loss`, group = Commodity), data = trend_bar, method = "lm", show.legend = FALSE, se = FALSE, color = "black", fill = "black", linewidth = .5) + 
+  stat_smooth(aes(x = Year, y = `Total loss`, group = Commodity), data = trend_bar, method = "lm", 
+              show.legend = FALSE, se = FALSE, color = "black", fill = "black", linewidth = .5, linetype = 2) + 
   geom_text(mapping = aes(x = Year, y = Area, label = sloop_text), data = trend_tbl, size = 3.8) + 
   theme_linedraw() + 
   theme(axis.text = ggplot2::element_text(size = font_size), 
@@ -812,7 +791,7 @@ gp <- ggplot() +
   ylab("Annual forest loss (K ha)")
 
 ggsave(filename = str_c("./output/fig-s7-barplot-top-commodites.png"), plot = gp, bg = "#ffffff",
-       width = 420, height = 500, units = "mm", scale = 1)
+       width = 420, height = 360, units = "mm", scale = 1)
 
 
 # --------------------------------------------------------------------------------------
@@ -1054,7 +1033,7 @@ forest_loss |>
 
 forest_loss |> 
   filter(2000 < year, year < 2020) |> 
-  filter(str_detect(list_of_commodities, "Gold")) |> 
+  filter(str_detect(list_of_commodities, "Coal")) |> 
   group_by(biome) |> 
   summarise(loss_mining = (sum(area_forest_loss_000, na.rm = TRUE) - sum(area_forest_loss_025, na.rm = TRUE))*100, .groups = "drop") |> 
   mutate(loss_perc = loss_mining / sum(loss_mining) * 100) |> 
