@@ -1,17 +1,13 @@
 # Generate figures and tables in the main paper
 
-library(stringr)
-library(dplyr)
 library(broom)
 library(sf)
 library(progress)
 library(tibble)
-library(readr)
 library(tidyr)
 library(stringr)
 library(dplyr)
 library(readr)
-library(sf)
 library(ggplot2)
 library(scales)
 library(viridis)
@@ -23,6 +19,9 @@ library(xtable)
 library(janitor)
 library(forcats)
 library(e1071) 
+library(parallel)
+library(GWmodel)
+library(treemapify)
 
 source("R/00_plot_goode_homolosine_world_map.R")
 
@@ -40,7 +39,6 @@ mine_features <- st_read(path_to_mining_polygons) |>
          country = str_replace_all(country, "^Bonaire, Sint Eustatius and Saba$", "Caribbean Netherlands"),
          country = str_replace_all(country, "^Congo$", "Republic of the Congo"),
          country = str_replace_all(country, "^Us Virgin Islands$", "US Virgin Islands"),
-         country = str_replace_all(country, "^French Southern and Antarctic Lands$", "French Southern Lands"),
          country = str_replace_all(country, "^French Southern and Antarctic Lands$", "French Southern Lands"))
 
 forest_loss <- read_csv(path_forest_loss_all) |> 
@@ -57,7 +55,6 @@ forest_loss <- read_csv(path_forest_loss_all) |>
          country = str_replace_all(country, "^Bonaire, Sint Eustatius and Saba$", "Caribbean Netherlands"),
          country = str_replace_all(country, "^Congo$", "Republic of the Congo"),
          country = str_replace_all(country, "^Us Virgin Islands$", "US Virgin Islands"),
-         country = str_replace_all(country, "^French Southern and Antarctic Lands$", "French Southern Lands"),
          country = str_replace_all(country, "^French Southern and Antarctic Lands$", "French Southern Lands"))
 
 forest_loss_accum <- forest_loss  |> 
@@ -242,6 +239,46 @@ ggplot2::ggsave(plot = W_gp, bg = "#ffffff",
                 filename = "output/fig-1-global-map.png",
                 width = textwidth, height = 170, units = "mm", scale = 1)
 
+
+
+# --------------------------------------------------------------------------------------
+# fig-1 GWR local trend ----------------------------------------------------------------
+gwr_coef <- read_rds("./output/gwr_res.rds")$SDF |> 
+  st_as_sf(gwr_res, crs = st_crs(gwr_grid_50)) |> 
+  rename(slope = year)
+      
+gwr_coef <- st_join(grid_50_forest_loss, gwr_coef) |> 
+  filter(!is.na(slope)) |> 
+  mutate(slope_cut = cut(slope, breaks = c(-31.0, 0, 25, 50, 100)))
+
+W_gp <- plot_goode_homolosine_world_map(ocean_color = "#e5f1f8", land_color = "gray95", family = font_family,
+                                        grid_color = "grey75", grid_size = 0.1,
+                                        country_borders_color = "grey75", country_borders_size = 0.1) +
+  ggplot2::geom_sf(data = gwr_coef, mapping = aes(fill = slope), color = NA, lwd = 0, size = 0) + # * 100 from km2 to ha
+  ggplot2::coord_sf(crs = "+proj=igh", expand = FALSE) +
+  viridis::scale_fill_viridis(option = "turbo", begin = 0, end = 1, direction = 1, 
+                              discrete = FALSE,
+                              trans = modulus_trans(0), #log10_trans(),
+                              #limits = c(-31, 332),
+                              breaks = c(-30, -5, 0, 5, 50, 300),
+                              labels = function(x) sprintf("%g", x)
+  ) +
+  theme(
+    legend.spacing.x = unit(1.0, 'cm'),
+    legend.position = "bottom",
+    legend.direction = "horizontal",
+    legend.justification = "center",
+    legend.box.spacing = unit(0.0, "cm"),
+    legend.key.size = unit(0.3, "cm"),
+    legend.key.width = unit(textheight/15, "mm"),
+    plot.margin = margin(t = -1, r = -1, b = 0, l = -1, unit = "cm")
+  ) +
+  labs(fill = bquote(Annual~forest~loss~increment~(ha))) + 
+  th
+
+ggplot2::ggsave(plot = W_gp, bg = "#ffffff",
+                filename = "output/fig-1-global-map-slope.png",
+                width = textwidth, height = 170, units = "mm", scale = 1)
 
 
 # --------------------------------------------------------------------------------------
@@ -445,9 +482,40 @@ ggsave(filename = str_c("./output/fig-s2-barplot-brazil.png"), plot = gp, bg = "
        width = 345, height = 140, units = "mm", scale = 1)
 
 
+# --------------------------------------------------------------------------------------
+# fig-sXX biomes pie plot --------------------------------------------------------------
+gp <- transmute(forest_loss, `Biome` = biome,
+          `Forest cover loss` = 100 * (ifelse(is.na(area_forest_loss_000), 0, area_forest_loss_000) -
+                                         ifelse(is.na(area_forest_loss_025), 0, area_forest_loss_025))) |>
+  group_by(`Biome`) |> 
+  summarise(across(everything(), ~sum(.x, na.rm = TRUE))) |> 
+  arrange(desc(`Forest cover loss`)) |> 
+  mutate(perc = `Forest cover loss` / sum(`Forest cover loss`) * 100, 
+         cum = cumsum(perc),
+         Biome = ifelse(cum > 97.0, "Other biomes", Biome)) |> 
+  mutate(Biome = factor(Biome, levels = unique(Biome), labels = unique(Biome))) |> 
+  group_by(`Biome`) |>
+  summarise(`Forest cover loss` = sum(`Forest cover loss`)) |> 
+  arrange(desc(`Forest cover loss`)) |> 
+  mutate(perc = `Forest cover loss` / sum(`Forest cover loss`) * 100, 
+         cum = cumsum(perc), label = str_c(Biome, "\n",round(perc, 1),"% (", formatC(`Forest cover loss`, format="f", big.mark=",", digits=0), " ha)")) |> 
+  mutate(label = factor(label, levels = unique(label), labels = unique(label))) |> 
+  ggplot(aes(area = `Forest cover loss`, fill = label, label = label)) +
+  geom_treemap() + 
+  #scale_fill_viridis_d(option = "D", direction = 1) + 
+  scale_fill_grey(start = 0.2, end = 0.8) +
+  geom_treemap_text(colour = "white",
+                    place = "centre",
+                    size = 9, 
+                    grow = FALSE,
+                    reflow = TRUE) +
+  theme(legend.position = "none")
+
+ggsave(filename = str_c("./output/fig-x-treemap-biomes.png"), plot = gp, bg = "#ffffff",
+       width = 240, height = 80, units = "mm", scale = 1)
 
 # --------------------------------------------------------------------------------------
-# fig-s3 plot biomes bar plot ----------------------------------------------------------
+# fig-sXXXX biomes bar trend plot ------------------------------------------------------
 
 fract_forest_cover <- tibble::tibble(
   `Initial tree cover (%)` = factor(c("(25, 50]", "(50, 75]", "(75, 100]"), 
