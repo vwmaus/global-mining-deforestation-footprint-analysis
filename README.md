@@ -1,4 +1,4 @@
-# Forest cover loss footprint of the global mining sector
+# Code to calculate the deforestation footprint of the global mining sector
 
 This repository contains the supplementary code to calculate global deforestation due to mining.
 
