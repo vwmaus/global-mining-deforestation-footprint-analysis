@@ -1,4 +1,4 @@
-# Code to calculate the deforestation footprint of the global mining sector
+# Global Mining Deforestation Footprint Analysis
 
 This repository contains the supplementary code to calculate global deforestation due to mining.
 
