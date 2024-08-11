@@ -306,8 +306,9 @@ gp <- global_trend_data |>
     names_to = "Initial tree cover (%)",
     values_to = "Area"
   ) |>
-  ggplot(aes(x = Year, y = Area, fill = `Initial tree cover (%)`)) + 
-  geom_bar(stat="identity", width = 0.5) +
+  #ggplot(aes(x = Year, y = Area, fill = `Initial tree cover (%)`)) + 
+  ggplot(aes(x = Year, y = Area)) + 
+  geom_bar(stat="identity", width = 0.4) +
   stat_smooth(aes(x = Year, y = `Total loss`), 
               data = global_trend_data, method = "lm", show.legend = FALSE, 
               se = FALSE, color = "black", fill = "black", linewidth = 1, linetype = 2) + 
@@ -324,7 +325,7 @@ gp <- global_trend_data |>
         legend.justification = "center",
         legend.box.spacing = unit(0.0, "cm"),
         legend.key.size = unit(0.3, "cm")) + 
-  scale_fill_grey(start = .7, end = 0, guide = guide_legend(direction = "horizontal", title.position = "top")) +
+  #scale_fill_grey(start = .7, end = 0, guide = guide_legend(direction = "horizontal", title.position = "top")) +
   scale_y_continuous(labels = label_number(scale = 1e-3, accuracy = 1)) + 
   scale_x_continuous(labels = seq(2000, 2019, 2), breaks = seq(2000, 2019, 2)) +
   ylab("Forest loss (K ha)") + 
@@ -379,7 +380,8 @@ sloop_pvalue <- trend_bar %>%
 
 gp <- ggplot() + 
   facet_wrap(~country) + 
-  geom_bar(mapping = aes(x = Year, y = area, fill = `Initial tree cover (%)`), data = forest_loss_ts, stat="identity", width = 0.5) + 
+  #geom_bar(mapping = aes(x = Year, y = area, fill = `Initial tree cover (%)`), data = forest_loss_ts, stat="identity", width = 0.5) + 
+  geom_bar(mapping = aes(x = Year, y = area), data = forest_loss_ts, stat="identity", width = 0.5) + 
   stat_smooth(aes(x = year, y = area_forest_loss_000*100, group = country), data = trend_bar, method = "lm", 
               show.legend = FALSE, se = FALSE, color = "black", fill = "black", linewidth = .5, linetype = 2) + 
   geom_text(mapping = aes(x = year, y = area, label = sloop_text), data = sloop_pvalue, size = 3.8) + 
@@ -393,7 +395,7 @@ gp <- ggplot() +
         legend.justification = "center",
         legend.box.spacing = unit(0.0, "cm"),
         legend.key.size = unit(0.3, "cm")) + 
-  scale_fill_grey(start = .7, end = 0, guide = guide_legend(direction = "horizontal", title.position = "top")) +
+  #scale_fill_grey(start = .7, end = 0, guide = guide_legend(direction = "horizontal", title.position = "top")) +
   scale_y_continuous(labels = label_number(scale = 1e-3, accuracy = 1)) + 
   scale_x_continuous(labels = seq(2000, 2015, 5), breaks = seq(2000, 2015, 5)) + 
   ylab("Annual forest loss (K ha)")
@@ -528,7 +530,9 @@ trend_bar <- bind_rows(trend_bar, trend_bar2)
 
 gp <- ggplot() + 
   facet_wrap(~facet) + 
-  geom_bar(mapping = aes(x = Year, y = area, fill = `Initial tree cover (%)`), 
+  # geom_bar(mapping = aes(x = Year, y = area, fill = `Initial tree cover (%)`), 
+  #          data = forest_loss_ts, stat="identity", width = 0.5) + 
+  geom_bar(mapping = aes(x = Year, y = area), 
            data = forest_loss_ts, stat="identity", width = 0.5) + 
   stat_smooth(aes(x = year, y = area_forest_loss_000*100, group = Period), 
               data = trend_bar, method = "lm", show.legend = FALSE, 
@@ -577,14 +581,14 @@ gp <- transmute(forest_loss, `Biome` = biome,
   scale_fill_grey(start = 0.2, end = 0.8) +
   geom_treemap_text(colour = "white",
                     place = "centre",
-                    size = 7, 
-                    min.size = 7,
+                    size = 9, 
+                    min.size = 9,
                     grow = FALSE,
                     reflow = TRUE) +
   theme(legend.position = "none")
 
 ggsave(filename = str_c("./output/fig-2-treemap-biomes.png"), plot = gp, bg = "#ffffff",
-       width = 240, height = 80, units = "mm", scale = 1)
+       width = 240, height = 110, units = "mm", scale = 1)
 
 # --------------------------------------------------------------------------------------
 # fig-s4 biomes bar trend plot ------------------------------------------------------
@@ -624,7 +628,8 @@ sloop_pvalue <- trend_bar %>%
 
 gp <- ggplot() + 
   facet_wrap(~biome, ncol = 3, scales = "free_y") + 
-  geom_bar(mapping = aes(x = Year, y = area, fill = `Initial tree cover (%)`), data = forest_loss_ts, stat="identity", width = 0.5) + 
+  #geom_bar(mapping = aes(x = Year, y = area, fill = `Initial tree cover (%)`), data = forest_loss_ts, stat="identity", width = 0.5) + 
+  geom_bar(mapping = aes(x = Year, y = area), data = forest_loss_ts, stat="identity", width = 0.5) + 
   stat_smooth(aes(x = year, y = area_forest_loss_000*100, group = biome), data = trend_bar, method = "lm", 
               show.legend = FALSE, se = FALSE, color = "black", fill = "black", linewidth = .5, linetype = 2) + 
   geom_text(mapping = aes(x = year, y = area, label = sloop_text), data = sloop_pvalue, size = 3.8) + 
@@ -672,7 +677,8 @@ gp <- str_c(na.omit(forest_loss$list_of_commodities), collapse = ",") |>
   select(-`Total loss`) |> 
   mutate(Commodity = factor(Commodity, Commodity, Commodity)) |> 
   pivot_longer(cols = c(-Commodity), names_to = "Initial tree cover (%)", values_to = "Area") |> 
-  ggplot(aes(x = Commodity, y = Area, fill = `Initial tree cover (%)`)) + 
+  # ggplot(aes(x = Commodity, y = Area, fill = `Initial tree cover (%)`)) + 
+  ggplot(aes(x = Commodity, y = Area)) + 
   geom_bar(stat="identity", width = 0.5) +
   theme_linedraw() + 
   theme(axis.text.x = element_text(angle = 45, hjust = 1),
@@ -911,7 +917,8 @@ trend_bar <- forest_loss_ts |>
 
 gp <- ggplot() + 
   facet_wrap(~Commodity, ncol = 3) + 
-  geom_bar(mapping = aes(x = Year, y = Area, fill = `Initial tree cover (%)`), data = forest_loss_ts, stat="identity", width = 0.5) + 
+  # geom_bar(mapping = aes(x = Year, y = Area, fill = `Initial tree cover (%)`), data = forest_loss_ts, stat="identity", width = 0.5) + 
+  geom_bar(mapping = aes(x = Year, y = Area), data = forest_loss_ts, stat="identity", width = 0.5) + 
   stat_smooth(aes(x = Year, y = `Total loss`, group = Commodity), data = trend_bar, method = "lm", 
               show.legend = FALSE, se = FALSE, color = "black", fill = "black", linewidth = .5, linetype = 2) + 
   geom_text(mapping = aes(x = Year, y = Area, label = sloop_text), data = trend_tbl, size = 3.8) + 
