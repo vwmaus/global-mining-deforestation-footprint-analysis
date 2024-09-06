@@ -16,8 +16,8 @@ library(units)
 library(readr)
 
 # Replace to process a different version
-gee_version_all <- "20221123a"
-gee_version_v2 <- "20221123b"
+gee_version_all <- "20240829a" # Maus et al. + OSM
+gee_version_v2 <- "20240829b" # Only Maus et al.
 
 # ------------------------------------------------------------------------------
 # tidy forest loss files for complete set of polygons
@@ -25,32 +25,61 @@ forest_loss_path <-
   dir(str_c("./data/mining-tree-cover-loss-",gee_version_all), 
       pattern = "tree_cover_loss_mines_", full.names = TRUE)
 out <- tibble::tibble(id = character(), year = double())
+
 for(f in forest_loss_path){
   
   print(str_c("Processing ", f))
   
   tree_cover <- str_remove_all(basename(f), "tree_cover_loss_mines_") %>%
     str_remove_all(str_c("_", gee_version_all, ".csv"))
-  
+
   mines_gee <- read_csv(f, show_col_types = FALSE) |> 
-    select(id, forest_loss = groups) |> 
-    separate_rows(forest_loss, sep="\\},\\s*") |> 
-    mutate(forest_loss = forest_loss |> 
-             str_remove_all("\\}") |> 
-             str_remove_all("\\{") |> 
-             str_remove_all("\\[") |> 
-             str_remove_all("\\]")) |> 
-    mutate(year = as.numeric(str_extract(forest_loss, pattern = "(?<=group\\=).+(?=,)")) + 2000,
-           area = as.numeric(str_extract(forest_loss, pattern = "(?<=sum\\=).+(?=$)")),
-           area = set_units(set_units(area, m^2), km^2)) |> 
-    dplyr::arrange(id, year) |> 
-    dplyr::select(id, year, area) |> 
-    dplyr::mutate(id = str_pad(id, 7, "0", side = 'left')) |> # correct ids when not char
-    dplyr::rename(!!paste0("area_forest_loss_", tree_cover) := area)
-  
+    select(id, tree_cover_2000, all_of(starts_with("y20"))) |> 
+    pivot_longer(cols = -c(id, tree_cover_2000), names_to = "year", values_to = "tree_loss") |>
+    mutate(year = as.numeric(str_remove_all(year, "y")), across(all_of(starts_with("tree_")), ~ .x * 1e-6)) |> # from m2 to km2
+    complete(id, year = full_seq(c(2000, max(year)), 1), fill = list(tree_loss = 0)) |> 
+    arrange(id, year) |> 
+    group_by(id) |>
+    mutate(tree_cover_2000 = unique(na.omit(tree_cover_2000))) |>
+    mutate(tree_cover_2000 = tree_cover_2000 - cumsum(tree_loss)) |>
+    rename(!!paste0("area_tree_cover_", tree_cover) := tree_cover_2000,
+           !!paste0("area_forest_loss_", tree_cover) := tree_loss) |>
+    mutate(id = str_pad(id, 7, "0", side = 'left')) # correct ids when not char
+
   out <- dplyr::full_join(out, mines_gee, by = c("id" = "id", "year" = "year"))
   
 }
+
+out
+
+gc()
+
+# for(f in forest_loss_path){
+  
+#   print(str_c("Processing ", f))
+  
+#   tree_cover <- str_remove_all(basename(f), "tree_cover_loss_mines_") %>%
+#     str_remove_all(str_c("_", gee_version_all, ".csv"))
+  
+#   mines_gee <- read_csv(f1, show_col_types = FALSE) |> 
+#     select(id, forest_loss = groups) |> 
+#     separate_rows(forest_loss, sep="\\},\\s*") |> 
+#     mutate(forest_loss = forest_loss |> 
+#              str_remove_all("\\}") |> 
+#              str_remove_all("\\{") |> 
+#              str_remove_all("\\[") |> 
+#              str_remove_all("\\]")) |> 
+#     mutate(year = as.numeric(str_extract(forest_loss, pattern = "(?<=group\\=).+(?=,)")) + 2000,
+#            area = as.numeric(str_extract(forest_loss, pattern = "(?<=sum\\=).+(?=$)")),
+#            area = set_units(set_units(area, m^2), km^2)) |> 
+#     dplyr::arrange(id, year) |> 
+#     dplyr::select(id, year, area) |> 
+#     dplyr::mutate(id = str_pad(id, 7, "0", side = 'left')) |> # correct ids when not char
+#     dplyr::rename(!!paste0("area_forest_loss_", tree_cover) := area)
+  
+#   out <- dplyr::full_join(out, mines_gee, by = c("id" = "id", "year" = "year"))
+  
+# }
 
 # ------------------------------------------------------------------------------
 # check forest loss cover area
@@ -76,44 +105,42 @@ mines_gee_all <- mines_gee_all |>
          country = ifelse(str_detect(country, "C(.+)te D\\?Ivoire"), "Côte d'Ivoire", country))
 
 # ------------------------------------------------------------------------------
-# add commodities
+# add commodities - select results from a specific cluster threshold
 mines_gee_all <- read_csv("./data/hcluster_concordance_20220203.csv") |> 
-    select(id, id_hcluster, list_of_commodities) |> 
-    mutate(id = str_remove_all(id, 'A')) |> 
+    select(id, id_hcluster = id_hcluster_6, list_of_commodities = comm_hcluster_6) |>
+    mutate(id = str_remove_all(id, 'A')) |>
     left_join(mines_gee_all)
 
 readr::write_csv(mines_gee_all, str_c("./output/global_mining_and_quarry_forest_loss_",gee_version_all,".csv"))
 
 
 # ------------------------------------------------------------------------------
-# tidy forest loss files for complete set of polygons
+# tidy forest loss files for Maus et al. set of polygons
 forest_loss_path <- 
   dir(str_c("./data/mining-tree-cover-loss-",gee_version_v2), 
       pattern = "tree_cover_loss_mines_", full.names = TRUE)
 out <- tibble::tibble(id = character(), year = double())
+
 for(f in forest_loss_path){
   
   print(str_c("Processing ", f))
   
   tree_cover <- str_remove_all(basename(f), "tree_cover_loss_mines_") %>%
     str_remove_all(str_c("_", gee_version_v2, ".csv"))
-  
+
   mines_gee <- read_csv(f, show_col_types = FALSE) |> 
-    select(id, forest_loss = groups) |> 
-    separate_rows(forest_loss, sep="\\},\\s*") |> 
-    mutate(forest_loss = forest_loss |> 
-             str_remove_all("\\}") |> 
-             str_remove_all("\\{") |> 
-             str_remove_all("\\[") |> 
-             str_remove_all("\\]")) |> 
-    mutate(year = as.numeric(str_extract(forest_loss, pattern = "(?<=group\\=).+(?=,)")) + 2000,
-           area = as.numeric(str_extract(forest_loss, pattern = "(?<=sum\\=).+(?=$)")),
-           area = set_units(set_units(area, m^2), km^2)) |> 
-    dplyr::arrange(id, year) |> 
-    dplyr::select(id, year, area) |> 
-    dplyr::mutate(id = str_pad(id, 7, "0", side = 'left')) |> # correct ids when not char
-    dplyr::rename(!!paste0("area_forest_loss_", tree_cover) := area)
-  
+    select(id, tree_cover_2000, all_of(starts_with("y20"))) |> 
+    pivot_longer(cols = -c(id, tree_cover_2000), names_to = "year", values_to = "tree_loss") |>
+    mutate(year = as.numeric(str_remove_all(year, "y")), across(all_of(starts_with("tree_")), ~ .x * 1e-6)) |> # from m2 to km2
+    complete(id, year = full_seq(c(2000, max(year)), 1), fill = list(tree_loss = 0)) |> 
+    arrange(id, year) |> 
+    group_by(id) |>
+    mutate(tree_cover_2000 = unique(na.omit(tree_cover_2000))) |>
+    mutate(tree_cover_2000 = tree_cover_2000 - cumsum(tree_loss)) |>
+    rename(!!paste0("area_tree_cover_", tree_cover) := tree_cover_2000,
+           !!paste0("area_forest_loss_", tree_cover) := tree_loss) |>
+    mutate(id = str_pad(id, 7, "0", side = 'left')) # correct ids when not char
+
   out <- dplyr::full_join(out, mines_gee, by = c("id" = "id", "year" = "year"))
   
 }
@@ -129,7 +156,7 @@ dplyr::summarise_all(select(out, -id, -year), sum, na.rm = TRUE) |>
 mines_com <- st_read("./output/global_mining_and_quarry_20220203.gpkg") |> 
   select(id, geom) |> 
   left_join(mutate(read_csv("./data/hcluster_concordance_20220203.csv"), id = str_remove_all(id, 'A'))) |> 
-  select(id, id_hcluster, list_of_commodities)
+  select(id, id_hcluster = id_hcluster_6, list_of_commodities = comm_hcluster_6)
 
 mines_gee_v2 <- str_c("./data/mining-tree-cover-loss-",gee_version_v2,"/mining_features_biomes_",gee_version_v2, ".geojson") |> 
   st_read(quiet = TRUE) |> 
