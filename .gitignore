@@ -30,3 +30,4 @@ vignettes/*.pdf
 data
 README.html
 output/
+aux-scripts/
