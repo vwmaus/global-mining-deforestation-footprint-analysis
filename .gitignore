@@ -31,3 +31,4 @@ data
 README.html
 output/
 aux-scripts/
+*.Rout
