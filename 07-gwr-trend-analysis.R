@@ -11,7 +11,7 @@ library(parallel)
 
 # ------------------------------------------------------------------------------
 # join datasets
-path_forest_loss_all <- "./output/global_mining_and_quarry_forest_loss_20221123a.csv"
+path_forest_loss_all <- "./output/global_mining_and_quarry_forest_loss_20240829a.csv"
 path_to_mining_polygons <- "./output/global_mining_and_quarry_20220203.gpkg"
 
 # Define years

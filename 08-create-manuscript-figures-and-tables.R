@@ -27,8 +27,8 @@ source("R/00_plot_goode_homolosine_world_map.R")
 
 # ------------------------------------------------------------------------------
 # join datasets
-path_forest_loss_all <- "./output/global_mining_and_quarry_forest_loss_20221123a.csv"
-path_forest_loss_v2 <- "./output/global_mining_and_quarry_forest_loss_20221123b.csv"
+path_forest_loss_all <- "./output/global_mining_and_quarry_forest_loss_20240829a.csv"
+path_forest_loss_v2 <- "./output/global_mining_and_quarry_forest_loss_20240829b.csv"
 path_to_mining_polygons <- "./output/global_mining_and_quarry_20220203.gpkg"
 
 mine_features <- st_read(path_to_mining_polygons) |> 
@@ -320,7 +320,7 @@ gp <- global_trend_data |>
         text = ggplot2::element_text(size = font_size),
         legend.text = element_text(size = font_size),
         legend.title = element_text(size = font_size),
-        legend.position = c(.15,.9),
+        legend.position.inside = c(.15,.9),
         legend.direction = "horizontal",
         legend.justification = "center",
         legend.box.spacing = unit(0.0, "cm"),
@@ -655,6 +655,25 @@ ggsave(filename = str_c("./output/fig-s4-barplot-biomes.png"), plot = gp, bg = "
 
 # --------------------------------------------------------------------------------------
 # fig-s5 plot commodities bar plot ------------------------------------------------------
+# # Get list of commodities
+# unique_commodities <- forest_loss |>
+#   pull(list_of_commodities) |>
+#   str_split(pattern = ",") |>
+#   unlist() |>
+#   unique() |>
+#   sort()
+
+# #### Calculate deforestation per country and commodity
+# def_country_comm <- lapply(unique_commodities, function(m){
+#   filter(forest_loss, str_detect(str_to_lower(list_of_commodities), str_to_lower(m))) |>
+#         mutate(material_name = m) |>
+#         group_by(isoa3, country_name, material_name, year) |>
+#         reframe(area_loss = sum(area_loss), area_loss_country = unique(area_loss_country))
+# }) |>
+#   bind_rows() |>
+#   group_by(isoa3, country_name, year) |>
+#   mutate(area_loss_adj = ifelse(area_loss == 0, 0, (area_loss / sum(area_loss)) * area_loss_country))
+
 gp <- str_c(na.omit(forest_loss$list_of_commodities), collapse = ",") |> 
   str_split(",") |> 
   unlist() |> 
