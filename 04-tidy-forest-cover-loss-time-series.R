@@ -109,7 +109,9 @@ mines_gee_all <- mines_gee_all |>
 mines_gee_all <- read_csv("./data/hcluster_concordance_20220203.csv") |> 
     select(id, id_hcluster = id_hcluster_6, list_of_commodities = comm_hcluster_6) |>
     mutate(id = str_remove_all(id, 'A')) |>
-    left_join(mines_gee_all)
+    left_join(mines_gee_all) |>
+    mutate(ecoregion = ifelse(ecoregion == "N/A", NA, ecoregion),
+           biome = ifelse(biome == "N/A", NA, biome))
 
 readr::write_csv(mines_gee_all, str_c("./output/global_mining_and_quarry_forest_loss_",gee_version_all,".csv"))
 
@@ -180,6 +182,6 @@ mines_gee_v2 |>
 # fixes unicode error
 mines_gee_v2 <- mines_gee_v2 |> 
   mutate(country = ifelse(str_detect(country, "Cura(.+)ao"), "Curaçao", country),
-         country = ifelse(str_detect(country, "C(.+)te D\\?Ivoire"), "Côte d'Ivoire", country))
+         country = ifelse(str_detect(country, "C(.+)te D\\?Ivoire"), "Côte d'Ivoire", country)) 
 
 readr::write_csv(mines_gee_v2, str_c("./output/global_mining_and_quarry_forest_loss_",gee_version_v2,".csv"))

@@ -29,7 +29,18 @@ source("R/00_plot_goode_homolosine_world_map.R")
 # join datasets
 path_forest_loss_all <- "./output/global_mining_and_quarry_forest_loss_20240829a.csv"
 path_forest_loss_v2 <- "./output/global_mining_and_quarry_forest_loss_20240829b.csv"
-path_to_mining_polygons <- "./output/global_mining_and_quarry_20220203.gpkg"
+path_to_mining_polygons <- "./output/data-release-v2/global_mining_polygons.gpkg"
+
+
+# --------------------------------------------------------------------------------------
+# define ggplot theme ------------------------------------------------------------------
+textwidth <- 345 # Get from latex comand: \the\textwidth in pt -- divide by 2.835 to mm
+textheight <- 550 # Get from latex comand: \the\textheight in pt -- divide by 2.835 to mm
+font_size <- 14 # font size in pt 
+pt_to_mm <- 2.835
+font_family <- "sans"
+th <- ggplot2::theme(axis.text = ggplot2::element_text(size = font_size, family = font_family), 
+                     text = ggplot2::element_text(size = font_size, family = font_family))
 
 mine_features <- st_read(path_to_mining_polygons) |> 
   rename(area_mine = area) |> 
@@ -39,16 +50,20 @@ mine_features <- st_read(path_to_mining_polygons) |>
          country = str_replace_all(country, "^Bonaire, Sint Eustatius and Saba$", "Caribbean Netherlands"),
          country = str_replace_all(country, "^Congo$", "Republic of the Congo"),
          country = str_replace_all(country, "^Us Virgin Islands$", "US Virgin Islands"),
-         country = str_replace_all(country, "^French Southern and Antarctic Lands$", "French Southern Lands"))
+         country = str_replace_all(country, "^French Southern and Antarctic Lands$", "French Southern Lands")) |>
+  mutate(biome = ifelse(biome == "N/A", NA, biome))
 
-forest_loss <- read_csv(path_forest_loss_all) |> 
+column_names <- names(read_csv(path_forest_loss_all, n_max = 0))
+columns_to_load <- c("id", "isoa3", "biome", "country", "ecoregion", "year", column_names[starts_with("area_forest_loss_", vars = column_names)])
+
+forest_loss <- read_csv(path_forest_loss_all, col_types = cols_only(!!!setNames(rep("?", length(columns_to_load)), columns_to_load))) |>
   filter(!is.na(year)) |> 
   filter(year > 2000, year < 2020) |> 
-  mutate(list_of_commodities = str_replace_all(list_of_commodities, "Alumina", "Aluminum"),
-         list_of_commodities = str_replace_all(list_of_commodities, "Bauxite", "Aluminum"),
-         list_of_commodities = str_replace_all(list_of_commodities, "Zinc-Lead", "Zinc"),
-         list_of_commodities = str_replace_all(list_of_commodities, "Heavy Rare Earths and Yttrium", "Unknown REE"),
-         list_of_commodities = str_replace_all(list_of_commodities, "Rare Earth Elements", "Unknown REE")) |> 
+  mutate(biome = ifelse(biome == "N/A", NA, biome)) |>
+  # mutate(list_of_commodities = str_replace_all(list_of_commodities, "Alumina|Bauxite", "Aluminum"),
+  #        list_of_commodities = str_replace_all(list_of_commodities, "Zinc-Lead", "Zinc"),
+  #        list_of_commodities = str_replace_all(list_of_commodities, "Heavy Rare Earths and Yttrium", "Unknown REE"),
+  #        list_of_commodities = str_replace_all(list_of_commodities, "Rare Earth Elements", "Unknown REE")) |> 
   mutate(country = str_replace_all(country, "^Russian Federation$", "Russia"),
          country = str_replace_all(country, "^Democratic Republic of The Congo$", "Congo (DRC)"),
          country = str_replace_all(country, "^United Republic of Tanzania$", "Tanzania"),
@@ -58,7 +73,7 @@ forest_loss <- read_csv(path_forest_loss_all) |>
          country = str_replace_all(country, "^French Southern and Antarctic Lands$", "French Southern Lands"))
 
 forest_loss_accum <- forest_loss  |> 
-  group_by(id, list_of_commodities, isoa3, country, ecoregion, biome) |> 
+  group_by(id, isoa3, country, ecoregion, biome) |> 
   summarise(across(matches('area_forest_loss'), sum)) 
 
 mine_features_areas <- mine_features |> 
@@ -68,7 +83,7 @@ mine_features_areas <- mine_features |>
 # commodity
 mine_features_areas |> 
   st_drop_geometry() |> 
-  mutate(Unknown = is.na(list_of_commodities)) |> 
+  mutate(Unknown = is.na(list_of_materials)) |> 
   group_by(Unknown) |> 
   summarise(area = sum(area_forest_loss_000 - area_forest_loss_025, na.rm = TRUE)) |> 
   mutate(perc = area / sum(area)) |> 
@@ -96,7 +111,7 @@ mine_features_areas |>
 # commodity
 mine_features_areas |> 
   st_drop_geometry() |> 
-  mutate(Unknown = is.na(list_of_commodities)) |> 
+  mutate(Unknown = is.na(list_of_materials)) |> 
   group_by(Unknown) |> 
   summarise(area = sum(area_mine, na.rm = TRUE)) |> 
   mutate(perc = area / sum(area)) |> 
@@ -120,15 +135,7 @@ mine_features_areas |>
   mutate(perc = area / sum(area)) |> 
   adorn_totals()
 
-# --------------------------------------------------------------------------------------
-# define ggplot theme ------------------------------------------------------------------
-textwidth <- 345 # Get from latex comand: \the\textwidth in pt -- divide by 2.835 to mm
-textheight <- 550 # Get from latex comand: \the\textheight in pt -- divide by 2.835 to mm
-font_size <- 14 # font size in pt 
-pt_to_mm <- 2.835
-font_family <- "sans"
-th <- ggplot2::theme(axis.text = ggplot2::element_text(size = font_size, family = font_family), 
-                     text = ggplot2::element_text(size = font_size, family = font_family))
+#### GRID plots
 
 make_grid_50x50 <- function(data){
   
@@ -240,7 +247,6 @@ ggplot2::ggsave(plot = W_gp, bg = "#ffffff",
                 width = textwidth, height = 170, units = "mm", scale = 1)
 
 
-
 # --------------------------------------------------------------------------------------
 # fig-1 GWR local trend ----------------------------------------------------------------
 gwr_coef <- read_rds("./output/gwr_res.rds")$SDF |> 
@@ -282,7 +288,6 @@ ggplot2::ggsave(plot = W_gp, bg = "#ffffff",
 
 
 # replace GWR with global trend
-
 global_trend_data <- forest_loss |> 
   transmute(Year = year,
     `(25, 50]` = area_forest_loss_050, 
@@ -346,7 +351,7 @@ fract_forest_cover <- tibble::tibble(
 # get top 6
 country_tbl <- forest_loss |> 
   group_by(isoa3, country) |> 
-  summarise(area = (sum(area_forest_loss_000, na.rm = TRUE) - sum(area_forest_loss_025, na.rm = TRUE))*100, .groups = "drop") |> 
+  reframe(area = (sum(area_forest_loss_000, na.rm = TRUE) - sum(area_forest_loss_025, na.rm = TRUE))*100) |> 
   mutate(perc = 100 * area / sum(area)) |> 
   arrange(desc(area)) |> 
   slice(1:6) |> 
@@ -357,7 +362,7 @@ forest_loss_ts <- forest_loss |>
   mutate(area_forest_loss_000 = ifelse(is.na(area_forest_loss_000), 0, area_forest_loss_000) - ifelse(is.na(area_forest_loss_025), 0, area_forest_loss_025)) |> 
   select(isoa3, year, area_forest_loss_000, area_forest_loss_050, area_forest_loss_075, area_forest_loss_100) |> 
   group_by(isoa3, year) |> 
-  summarise(across(everything(), sum, na.rm = TRUE), .groups = 'drop') |> 
+  reframe(across(everything(), sum, na.rm = TRUE)) |> 
   filter(year > 2000, year < 2020) |> 
   pivot_longer(cols = c(-year, -area_forest_loss_000, -isoa3)) |> 
   left_join(fract_forest_cover) |> 
@@ -368,10 +373,10 @@ trend_bar <- forest_loss_ts |>
   select(country, year, area_forest_loss_000) |> 
   distinct()
 
-sloop_pvalue <- trend_bar %>% 
+sloop_pvalue <- trend_bar |>
   group_by(country) |> 
   mutate(area_forest_loss_000 = 100 * area_forest_loss_000) |> 
-  summarise(out = list(tidy(lm(area_forest_loss_000 ~ year, data = cur_data())))) %>% 
+  reframe(out = list(tidy(lm(area_forest_loss_000 ~ year, data = cur_data())))) |>
   unnest(out) |> 
   filter(term == "year") |> 
   mutate(sloop_text = str_c("Forest loss annual increment: ", round(estimate, 0), " ha ", 
@@ -443,7 +448,7 @@ forest_loss_ts <- forest_loss |>
   select(isoa3, year, area_forest_loss_000, area_forest_loss_050, 
          area_forest_loss_075, area_forest_loss_100) |> 
   group_by(isoa3, year) |> 
-  summarise(across(everything(), sum, na.rm = TRUE), .groups = 'drop') |> 
+  reframe(across(everything(), sum, na.rm = TRUE)) |> 
   filter(year > 2000, year < 2020) |> 
   pivot_longer(cols = c(-year, -area_forest_loss_000, -isoa3)) |> 
   left_join(fract_forest_cover) |> 
@@ -462,7 +467,7 @@ trend_bar <- forest_loss_ts |>
 sloop_pvalue <- trend_bar %>% 
   group_by(Period) |> 
   mutate(area_forest_loss_000 = 100 * area_forest_loss_000) |> 
-  summarise(out = list(tidy(lm(area_forest_loss_000 ~ year, data = cur_data())))) %>% 
+  reframe(out = list(tidy(lm(area_forest_loss_000 ~ year, data = cur_data())))) %>% 
   unnest(out) |> 
   filter(term == "year") |> 
   mutate(sloop_text = str_c(Period, ": ","Annual increment: ", round(estimate, 0), " ha ", 
@@ -490,7 +495,7 @@ forest_loss_ts2 <- forest_loss |>
   select(isoa3, year, area_forest_loss_000, area_forest_loss_050_p, 
          area_forest_loss_075_p, area_forest_loss_100_p) |> 
   group_by(isoa3, year) |> 
-  summarise(across(everything(), sum, na.rm = TRUE), .groups = 'drop') |> 
+  reframe(across(everything(), sum, na.rm = TRUE)) |> 
   filter(year > 2000, year < 2020) |> 
   pivot_longer(cols = c(-year, -area_forest_loss_000, -isoa3)) |> 
   left_join(fract_forest_cover) |> 
@@ -509,7 +514,7 @@ trend_bar2 <- forest_loss_ts2 |>
 sloop_pvalue2 <- trend_bar2 %>% 
   group_by(Period) |> 
   mutate(area_forest_loss_000 = 100 * area_forest_loss_000) |> 
-  summarise(out = list(tidy(lm(area_forest_loss_000 ~ year, data = cur_data())))) %>% 
+  reframe(out = list(tidy(lm(area_forest_loss_000 ~ year, data = cur_data())))) %>% 
   unnest(out) |> 
   filter(term == "year") |> 
   mutate(sloop_text = str_c(Period, ": ","Annual increment: ", round(estimate, 0), " ha ", 
@@ -563,22 +568,22 @@ gp <- transmute(forest_loss, `Biome` = biome,
           `Forest cover loss` = 100 * (ifelse(is.na(area_forest_loss_000), 0, area_forest_loss_000) -
                                          ifelse(is.na(area_forest_loss_025), 0, area_forest_loss_025))) |>
   group_by(`Biome`) |> 
-  summarise(across(everything(), ~sum(.x, na.rm = TRUE))) |> 
+  reframe(across(everything(), ~sum(.x, na.rm = TRUE))) |> 
   arrange(desc(`Forest cover loss`)) |> 
   mutate(perc = `Forest cover loss` / sum(`Forest cover loss`) * 100, 
          cum = cumsum(perc),
          Biome = ifelse(cum > 97.0, "Other biomes", Biome)) |> 
   mutate(Biome = factor(Biome, levels = unique(Biome), labels = unique(Biome))) |> 
   group_by(`Biome`) |>
-  summarise(`Forest cover loss` = sum(`Forest cover loss`)) |> 
+  reframe(`Forest cover loss` = sum(`Forest cover loss`)) |> 
   arrange(desc(`Forest cover loss`)) |> 
   mutate(perc = `Forest cover loss` / sum(`Forest cover loss`) * 100, 
          cum = cumsum(perc), label = str_c(Biome, "\n",round(perc, 1),"% (", formatC(`Forest cover loss`, format="f", big.mark=",", digits=0), " ha)")) |> 
   mutate(label = factor(label, levels = unique(label), labels = unique(label))) |> 
   ggplot(aes(area = `Forest cover loss`, fill = label, label = label)) +
   geom_treemap() + 
-  #scale_fill_viridis_d(option = "D", direction = 1) + 
-  scale_fill_grey(start = 0.2, end = 0.8) +
+  scale_fill_viridis_d(option = "D", direction = 1, begin = 0, end = 0.9) + 
+  #scale_fill_grey(start = 0.2, end = 0.8) +
   geom_treemap_text(colour = "white",
                     place = "centre",
                     size = 9, 
@@ -605,7 +610,7 @@ forest_loss_ts <- forest_loss |>
   mutate(area_forest_loss_000 = ifelse(is.na(area_forest_loss_000), 0, area_forest_loss_000) - ifelse(is.na(area_forest_loss_025), 0, area_forest_loss_025)) |> 
   select(biome, year, area_forest_loss_000, area_forest_loss_050, area_forest_loss_075, area_forest_loss_100) |> 
   group_by(biome, year) |> 
-  summarise(across(everything(), sum, na.rm = TRUE), .groups = 'drop') |> 
+  reframe(across(everything(), sum, na.rm = TRUE)) |> 
   filter(year > 2000, year < 2020) |> 
   pivot_longer(cols = c(-year, -area_forest_loss_000, -biome)) |> 
   left_join(fract_forest_cover) |> 
@@ -619,7 +624,7 @@ trend_bar <- forest_loss_ts |>
 sloop_pvalue <- trend_bar %>% 
   group_by(biome) |> 
   mutate(area_forest_loss_000 = 100 * area_forest_loss_000) |> 
-  summarise(out = list(tidy(lm(area_forest_loss_000 ~ year, data = cur_data()))), area = max(area_forest_loss_000, na.rm = TRUE) + sd(area_forest_loss_000, na.rm = TRUE)/3) %>% 
+  reframe(out = list(tidy(lm(area_forest_loss_000 ~ year, data = cur_data()))), area = max(area_forest_loss_000, na.rm = TRUE) + sd(area_forest_loss_000, na.rm = TRUE)/3) %>% 
   unnest(out) |> 
   filter(term == "year") |> 
   mutate(sloop_text = str_c("Forest loss annual increment: ", round(estimate, 0), " ha ", 
@@ -638,7 +643,7 @@ gp <- ggplot() +
         text = ggplot2::element_text(size = font_size),
         legend.text = element_text(size = font_size),
         legend.title = element_text(size = font_size),
-        legend.position = c(0.8,.1),
+        # legend.position.inside = c(0.8,.1),
         legend.direction = "horizontal",
         legend.justification = "center",
         legend.box.spacing = unit(0.0, "cm"),
@@ -673,6 +678,11 @@ ggsave(filename = str_c("./output/fig-s4-barplot-biomes.png"), plot = gp, bg = "
 #   bind_rows() |>
 #   group_by(isoa3, country_name, year) |>
 #   mutate(area_loss_adj = ifelse(area_loss == 0, 0, (area_loss / sum(area_loss)) * area_loss_country))
+
+
+
+############### TODO - REPLACE DATA WITH THE ADJ COMMODITIES 
+
 
 gp <- str_c(na.omit(forest_loss$list_of_commodities), collapse = ",") |> 
   str_split(",") |> 
