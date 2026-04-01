@@ -684,6 +684,7 @@ ggsave(filename = str_c("./output/fig-s4-barplot-biomes.png"), plot = gp, bg = "
 ############### TODO - REPLACE DATA WITH THE ADJ COMMODITIES 
 
 
+
 gp <- str_c(na.omit(forest_loss$list_of_commodities), collapse = ",") |> 
   str_split(",") |> 
   unlist() |> 

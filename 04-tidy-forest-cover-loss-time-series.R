@@ -6,182 +6,130 @@
 # 
 # The datasets generated in this script are published in Zenodo https://doi.org/10.5281/zenodo.7299103
 
-library(sf)
 library(dplyr)
 library(tidyr)
 library(stringr)
-library(units)
 library(progress)
-library(units)
 library(readr)
+library(purrr)   # Added for memory-efficient list reduction
 
 # Replace to process a different version
-gee_version_all <- "20240829a" # Maus et al. + OSM
-gee_version_v2 <- "20240829b" # Only Maus et al.
+gee_version_all <- "20260326"
+
+year_start <- 2000
+year_end <- 2023
 
 # ------------------------------------------------------------------------------
 # tidy forest loss files for complete set of polygons
 forest_loss_path <- 
   dir(str_c("./data/mining-tree-cover-loss-",gee_version_all), 
-      pattern = "tree_cover_loss_mines_", full.names = TRUE)
-out <- tibble::tibble(id = character(), year = double())
+      pattern = "tree_cover_loss_mines_", full.names = TRUE) 
 
-for(f in forest_loss_path){
+# This pattern will successfully capture both standard and PLANTED files
+forest_loss_path <- forest_loss_path[str_detect(forest_loss_path, "_000_|_025_")]
+
+treatments <- c("ALL", "HMA", "NMF", "NPA", "PLS", "PRT", "SNR", "SUN", "WLA")
+
+# Initialize progress bar
+pb <- progress_bar$new(
+  format = "  Processing files [:bar] :percent in :elapsed (ETA: :eta)",
+  total = length(forest_loss_path),
+  clear = FALSE,
+  width = 80,
+  force = TRUE # Force progress bar to show in non-interactive sessions like R CMD BATCH
+)
+
+# Pre-allocate list for memory efficiency instead of using foreach .combine.
+# Iteratively joining dataframes inside a loop causes heavy memory reallocation.
+list_out <- vector("list", length(forest_loss_path))
+
+for (i in seq_along(forest_loss_path)) {
+  f <- forest_loss_path[i]
   
-  print(str_c("Processing ", f))
-  
-  tree_cover <- str_remove_all(basename(f), "tree_cover_loss_mines_") %>%
+  # Use the progress bar in an interactive session, 
+  # but use log-friendly lines & buffer flushing for R CMD BATCH
+  if (interactive()) {
+    pb$tick()
+  } else {
+    cat(sprintf("Processing file %d / %d: %s\n", i, length(forest_loss_path), basename(f)))
+    flush.console() # Forces R to write to the .Rout file immediately so tail -f sees it
+  }
+
+  tree_cover <- str_remove_all(basename(f), "tree_cover_loss_mines_") |>
     str_remove_all(str_c("_", gee_version_all, ".csv"))
 
-  mines_gee <- read_csv(f, show_col_types = FALSE) |> 
-    select(id, tree_cover_2000, all_of(starts_with("y20"))) |> 
+  mines_gee_raw <- read_csv(f, show_col_types = FALSE)
+  
+  # Handle completely empty files (e.g., highly filtered PLANTED files)
+  if (nrow(mines_gee_raw) == 0) {
+    empty_df <- tibble(id = character(), year = numeric())
+    empty_df[[paste0("area_tree_cover_", tree_cover)]] <- numeric()
+    empty_df[[paste0("area_forest_loss_", tree_cover)]] <- numeric()
+    list_out[[i]] <- empty_df
+    next # Skip the rest of the processing for this file
+  }
+
+  mines_gee <- mines_gee_raw |>
+    select(id, tree_cover_2000 = treecover2000, all_of(ends_with("_loss"))) |> 
     pivot_longer(cols = -c(id, tree_cover_2000), names_to = "year", values_to = "tree_loss") |>
-    mutate(year = as.numeric(str_remove_all(year, "y")), across(all_of(starts_with("tree_")), ~ .x * 1e-6)) |> # from m2 to km2
+    mutate(
+      year = as.numeric(str_remove_all(year, "_loss")) + 2000, 
+      across(starts_with("tree_"), ~ as.numeric(.x) * 1e-4) # Forced as.numeric() to handle empty/character columns
+    ) |> # from m2 to ha
     complete(id, year = full_seq(c(2000, max(year)), 1), fill = list(tree_loss = 0)) |> 
     arrange(id, year) |> 
     group_by(id) |>
-    mutate(tree_cover_2000 = unique(na.omit(tree_cover_2000))) |>
-    mutate(tree_cover_2000 = tree_cover_2000 - cumsum(tree_loss)) |>
-    rename(!!paste0("area_tree_cover_", tree_cover) := tree_cover_2000,
-           !!paste0("area_forest_loss_", tree_cover) := tree_loss) |>
-    mutate(id = str_pad(id, 7, "0", side = 'left')) # correct ids when not char
+    mutate(
+      tree_cover_2000 = unique(na.omit(tree_cover_2000)),
+      tree_cover_2000 = tree_cover_2000 - cumsum(tree_loss)
+    ) |>
+    rename(
+      !!paste0("area_tree_cover_", tree_cover) := tree_cover_2000,
+      !!paste0("area_forest_loss_", tree_cover) := tree_loss
+    ) |>
+    mutate(id = str_pad(as.character(id), 7, "0", side = 'left')) |> # correct ids when not char
+    ungroup() |>
+    filter(year_start <= year, year <= year_end)
 
-  out <- dplyr::full_join(out, mines_gee, by = c("id" = "id", "year" = "year"))
-  
+  list_out[[i]] <- mines_gee
 }
 
-out
+cat("\nCombining all processed files...\n")
 
-gc()
+# Efficiently combine the list of data frames at once
+out <- reduce(list_out, full_join, by = c("id", "year"))
 
-# for(f in forest_loss_path){
-  
-#   print(str_c("Processing ", f))
-  
-#   tree_cover <- str_remove_all(basename(f), "tree_cover_loss_mines_") %>%
-#     str_remove_all(str_c("_", gee_version_all, ".csv"))
-  
-#   mines_gee <- read_csv(f1, show_col_types = FALSE) |> 
-#     select(id, forest_loss = groups) |> 
-#     separate_rows(forest_loss, sep="\\},\\s*") |> 
-#     mutate(forest_loss = forest_loss |> 
-#              str_remove_all("\\}") |> 
-#              str_remove_all("\\{") |> 
-#              str_remove_all("\\[") |> 
-#              str_remove_all("\\]")) |> 
-#     mutate(year = as.numeric(str_extract(forest_loss, pattern = "(?<=group\\=).+(?=,)")) + 2000,
-#            area = as.numeric(str_extract(forest_loss, pattern = "(?<=sum\\=).+(?=$)")),
-#            area = set_units(set_units(area, m^2), km^2)) |> 
-#     dplyr::arrange(id, year) |> 
-#     dplyr::select(id, year, area) |> 
-#     dplyr::mutate(id = str_pad(id, 7, "0", side = 'left')) |> # correct ids when not char
-#     dplyr::rename(!!paste0("area_forest_loss_", tree_cover) := area)
-  
-#   out <- dplyr::full_join(out, mines_gee, by = c("id" = "id", "year" = "year"))
-  
-# }
+cat("Cleaning up and calculating treatment differences...\n")
 
-# ------------------------------------------------------------------------------
-# check forest loss cover area
-dplyr::summarise_all(select(out, -id, -year), sum, na.rm = TRUE) |> 
-  select(area_forest_loss_000, area_forest_loss_025, area_forest_loss_050,
-         area_forest_loss_075, area_forest_loss_100)
+# Replace NAs with 0 (since filtered-out rows from PLANTED files mean 0 planted area and 0 loss)
+out <- out |>
+  mutate(across(starts_with("area_"), ~replace_na(., 0)))
 
-# ------------------------------------------------------------------------------
-# add attributes
-mines_gee_all <- str_c("./data/mining-tree-cover-loss-",gee_version_all,"/mining_features_biomes_",gee_version_all, ".geojson") |> 
-  st_read(quiet = TRUE) |> 
-  dplyr::mutate(id = str_pad(id, 7, "0", side = 'left')) # correct ids when not char
+# Use mutate and across to compute the differences for all treatments and PLANTED dynamically
+out <- out |>
+  mutate(across(
+    .cols = matches("area_tree_cover_.*000_"), 
+    .names = "{str_replace(.col, '000_', '')}",
+    .fns = ~ . - get(str_replace(cur_column(), "000_", "025_"))
+  )) |>
+  mutate(across(
+    .cols = matches("area_forest_loss_.*000_"), 
+    .names = "{str_replace(.col, '000_', '')}",
+    .fns = ~ . - get(str_replace(cur_column(), "000_", "025_"))
+  )) |>
+  select(-matches("000|025|050|075|100"))
 
-mines_gee_all <- mines_gee_all |> 
-  st_drop_geometry() |>
-  as_tibble() |>
-  select(id, isoa3, country, ecoregion, biome) |> 
-  right_join(out)
+# summary loss
+# reframe(out, across(starts_with("area_forest_loss"), ~sum(., na.rm = TRUE)))
 
-# fixes unicode error
-mines_gee_all <- mines_gee_all |> 
-  mutate(country = ifelse(str_detect(country, "Cura(.+)ao"), "Curaçao", country),
-         country = ifelse(str_detect(country, "C(.+)te D\\?Ivoire"), "Côte d'Ivoire", country))
+# initial forest cover
+# filter(out, year == year_start) |>
+#  reframe(across(starts_with("area_tree_cover"), ~sum(., na.rm = TRUE)))
 
-# ------------------------------------------------------------------------------
-# add commodities - select results from a specific cluster threshold
-mines_gee_all <- read_csv("./data/hcluster_concordance_20220203.csv") |> 
-    select(id, id_hcluster = id_hcluster_6, list_of_commodities = comm_hcluster_6) |>
-    mutate(id = str_remove_all(id, 'A')) |>
-    left_join(mines_gee_all) |>
-    mutate(ecoregion = ifelse(ecoregion == "N/A", NA, ecoregion),
-           biome = ifelse(biome == "N/A", NA, biome))
+# final forest cover
+# filter(out, year == year_end) |>
+#  reframe(across(starts_with("area_tree_cover"), ~sum(., na.rm = TRUE)))
 
-readr::write_csv(mines_gee_all, str_c("./output/global_mining_and_quarry_forest_loss_",gee_version_all,".csv"))
-
-
-# ------------------------------------------------------------------------------
-# tidy forest loss files for Maus et al. set of polygons
-forest_loss_path <- 
-  dir(str_c("./data/mining-tree-cover-loss-",gee_version_v2), 
-      pattern = "tree_cover_loss_mines_", full.names = TRUE)
-out <- tibble::tibble(id = character(), year = double())
-
-for(f in forest_loss_path){
-  
-  print(str_c("Processing ", f))
-  
-  tree_cover <- str_remove_all(basename(f), "tree_cover_loss_mines_") %>%
-    str_remove_all(str_c("_", gee_version_v2, ".csv"))
-
-  mines_gee <- read_csv(f, show_col_types = FALSE) |> 
-    select(id, tree_cover_2000, all_of(starts_with("y20"))) |> 
-    pivot_longer(cols = -c(id, tree_cover_2000), names_to = "year", values_to = "tree_loss") |>
-    mutate(year = as.numeric(str_remove_all(year, "y")), across(all_of(starts_with("tree_")), ~ .x * 1e-6)) |> # from m2 to km2
-    complete(id, year = full_seq(c(2000, max(year)), 1), fill = list(tree_loss = 0)) |> 
-    arrange(id, year) |> 
-    group_by(id) |>
-    mutate(tree_cover_2000 = unique(na.omit(tree_cover_2000))) |>
-    mutate(tree_cover_2000 = tree_cover_2000 - cumsum(tree_loss)) |>
-    rename(!!paste0("area_tree_cover_", tree_cover) := tree_cover_2000,
-           !!paste0("area_forest_loss_", tree_cover) := tree_loss) |>
-    mutate(id = str_pad(id, 7, "0", side = 'left')) # correct ids when not char
-
-  out <- dplyr::full_join(out, mines_gee, by = c("id" = "id", "year" = "year"))
-  
-}
-
-# ------------------------------------------------------------------------------
-# check forest loss cover area
-dplyr::summarise_all(select(out, -id, -year), sum, na.rm = TRUE) |> 
-  select(area_forest_loss_000, area_forest_loss_025, area_forest_loss_050,
-         area_forest_loss_075, area_forest_loss_100)
-
-# ------------------------------------------------------------------------------
-# add attributes
-mines_com <- st_read("./output/global_mining_and_quarry_20220203.gpkg") |> 
-  select(id, geom) |> 
-  left_join(mutate(read_csv("./data/hcluster_concordance_20220203.csv"), id = str_remove_all(id, 'A'))) |> 
-  select(id, id_hcluster = id_hcluster_6, list_of_commodities = comm_hcluster_6)
-
-mines_gee_v2 <- str_c("./data/mining-tree-cover-loss-",gee_version_v2,"/mining_features_biomes_",gee_version_v2, ".geojson") |> 
-  st_read(quiet = TRUE) |> 
-  dplyr::mutate(geometry = st_centroid(geometry), id = str_pad(id, 7, "0", side = 'left')) |> # correct ids when not char
-  st_join(y = mines_com, join = st_intersects)
-
-# make polygon ids consistent across datasets 
-mines_gee_v2 <- mines_gee_v2 |> 
-  st_drop_geometry() |>
-  as_tibble() |>
-  select(id = id.y, id.x, id_hcluster, list_of_commodities, isoa3, country, ecoregion, biome) |> 
-  right_join(out, by = c("id.x" = "id")) |> 
-  select(-id.x)
-
-# check commodities area
-mines_gee_v2 |> 
-  st_drop_geometry() |> 
-  group_by(is.na(list_of_commodities)) |> 
-  summarise(area_forest_loss_000 = sum(area_forest_loss_000, na.rm = TRUE))
-
-# fixes unicode error
-mines_gee_v2 <- mines_gee_v2 |> 
-  mutate(country = ifelse(str_detect(country, "Cura(.+)ao"), "Curaçao", country),
-         country = ifelse(str_detect(country, "C(.+)te D\\?Ivoire"), "Côte d'Ivoire", country)) 
-
-readr::write_csv(mines_gee_v2, str_c("./output/global_mining_and_quarry_forest_loss_",gee_version_v2,".csv"))
+cat("Writing output...\n")
+write_csv(out, str_c("./output/global_mining_forest_loss_",year_start,"-", year_end,".csv"))
+cat("Done!\n")

@@ -1,37 +1,43 @@
+library(sf)
 library(dplyr)
-library(tidyr)
 library(stringr)
 library(readr)
-library(sf)
+library(tidyr)
+library(rnaturalearth)
+library(rnaturalearthdata)
 
-gee_version_all <- "20240829a" # Maus et al. + OSM
-release_version <- "v2"
+release_version <- "v3"
 dir.create(str_c("./output/data-release-", release_version), recursive = TRUE)
 
-# reade source files
-global_mining_forest_loss <- read_csv(str_c("./output/global_mining_and_quarry_forest_loss_", gee_version_all, ".csv"))
+# Reade source files
+mine_forest_loss <- read_csv("./output/global_mining_forest_loss_2000-2023.csv")
 
-cluster_ids <- group_by(global_mining_forest_loss, id) |>
-    reframe(id_hcluster = unique(id_hcluster), list_of_commodities = unique(list_of_commodities))
+mine_polygons <- st_read("./data/20260325-all_materials/mine_polygons.gpkg")
 
-global_mining_polygons <- st_read(str_c("data/mining-tree-cover-loss-",gee_version_all,"/mining_features_biomes_20240829a.geojson"))  |>
-    left_join(cluster_ids, by = join_by("id")) |>
-    select(id, id_hcluster, isoa3, country, area = mine_area, list_of_materials = list_of_commodities, ecoregion, biome, geom = geometry) |>
-    mutate(ecoregion = ifelse(ecoregion == "N/A", NA, ecoregion),
-           biome = ifelse(biome == "N/A", NA, biome))
+# Add spatial extensions
+sf_use_s2(FALSE)
 
-global_mining_forest_loss <- select(global_mining_forest_loss, id, year, isoa3, starts_with("area_tree_cover_"), starts_with("area_forest_loss_"))
+if(!file.exists("./ecoregions/Ecoregions2017.shp")){
+    download.file("https://storage.googleapis.com/teow2016/Ecoregions2017.zip", destfile = "./data/Ecoregions2017.zip")
+    unzip("./data/Ecoregions2017.zip", exdir = "./data/ecoregions/")
+}
 
-global_mining_materials_forest_loss <- read_csv(str_c("./output/global_commodity_forest_loss_", gee_version_all, ".csv")) |>
-    select(year, isoa3, material_name, ids = id, starts_with("area_forest_loss_"))
+biomes <- st_read("./data/ecoregions/Ecoregions2017.shp") |>
+    select(biome_name = BIOME_NAME)
 
-# write release files
-names(global_mining_polygons)
-st_write(global_mining_polygons, str_c("./output/data-release-",release_version,"/global_mining_polygons.gpkg"), layer = "mining_polygons")
+world_map <- ne_countries(scale = "medium", returnclass = "sf") |>
+    select(country_name = admin, country_isoa3 = adm0_a3)
 
-names(global_mining_forest_loss)
-write_csv(global_mining_forest_loss, str_c("./output/data-release-",release_version,"/global_mining_forest_loss.csv"))
+extensions_tbl <- st_centroid(mine_polygons) |>
+    st_join(world_map, join = st_nearest_feature) |>
+    st_join(biomes, join = st_nearest_feature) |>
+    st_drop_geometry() |>
+    as_tibble() |>
+    select(id, id_cluster, country_name, country_isoa3, biome_name, primary_materials_list, materials_list, area_mine, data_source)
 
-names(global_mining_materials_forest_loss)
-write_csv(global_mining_materials_forest_loss, str_c("./output/data-release-",release_version,"/global_mining_materials_forest_loss.csv"))
+# Write data release files
+names(mine_forest_loss)
+write_csv(mine_forest_loss, str_c("./output/data-release-",release_version,"/mine_forest_loss.csv"))
 
+names(extensions_tbl)
+write_csv(extensions_tbl, str_c("./output/data-release-",release_version,"/extensions_tbl.csv"))
